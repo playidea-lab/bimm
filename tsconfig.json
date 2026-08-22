@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    // 코어(`borch`)와 같은 설정이다. 갈리면 코어에서 통과한 코드가 여기서 안 되거나
+    // 그 반대가 되는데, 그 차이는 컴파일러가 아니라 사용자가 발견하게 된다.
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+
+    // `borch` 는 아직 npm 에 없다(코어 공개와 같이 연다). 그때까지 타입은 **옆에
+    // 나란히 받아둔 코어의 선언 파일**에서 온다 — 형만 빌리는 것이라 dist 의
+    // .d.ts 로 충분하고, 소스가 프로그램에 딸려 들어와 우리 emit 을 어지럽히지도
+    // 않는다.
+    //
+    // 코어를 받아 `npm run build:ts` 를 한 번 돌려야 이 경로가 생긴다. 없으면
+    // 컴파일러가 "Cannot find module 'borch'" 라고 말하는데, 그것이 정확한
+    // 진단이다. borch 가 npm 에 나가는 날 이 두 줄은 사라진다.
+    "baseUrl": ".",
+    // `@core/bench` 는 코어의 벤치 모듈이다. 공개된 진입점이 아니고 앞으로도
+    // 아니다 — 카탈로그가 코어의 정의와 갈리지 않았는지 보는 대조 검사 하나를
+    // 위해서만 있는 개발용 이름이다. 브라우저 쪽 임포트 맵이 같은 이름을 잇는다.
+    "paths": {
+      "borch": ["../borch/borch-ts/dist/src/index.d.ts"]
+    },
+    "lib": ["ES2022", "DOM"],
+    // WebGPU 타입은 아직 TypeScript 의 기본 DOM 라이브러리에 없다. 코어의 선언
+    // 파일이 `GPUBuffer` 같은 이름을 그대로 쓰므로, 없으면 **코어를 읽는 자리에서**
+    // 컴파일이 멈춘다 — 우리 코드가 WebGPU 를 직접 안 만져도 필요하다.
+    // `node` 는 test/ 가 node:test 를 쓰기 때문이다.
+    "types": ["@webgpu/types", "node"],
+    "outDir": "dist",
+    "rootDir": ".",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    "declaration": true,
+    "sourceMap": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

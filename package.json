@@ -1,0 +1,50 @@
+{
+  "name": "bimm",
+  "version": "0.0.0",
+  "description": "borch 런타임 위의 모델 아키텍처 카탈로그 — timm 의 자리",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "types": "./dist/src/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "dist/src",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "borch": "^0.1.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build",
+    "test": "tsc -p tsconfig.json && node --test dist/test/*.js"
+  },
+  "//": [
+    "version 0.0.0 이다 — 아직 아무것도 나가지 않았다. 코어 npm `borch` 와 `borch-hub` 가",
+    "같은 이유로 0.0.0 에서 시작했다.",
+    "",
+    "borch 는 peerDependency 다. 이 패키지가 borch 를 끌고 오면 사용자의 borch 와 두 벌이",
+    "되고, 텐서 두 벌은 같은 GPU 장치를 공유하지 않아 조용히 안 맞는다.",
+    "",
+    "borch 0.1.0 은 아직 npm 에 없으므로 optional peer 다 — 없는 패키지를 필수 peer 로 두면",
+    "npm 이 lockfile 조차 못 만든다. borch 가 나가는 날 optional 을 뗀다."
+  ],
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@webgpu/types": "^0.1.71",
+    "typescript": "^5.9.0"
+  },
+  "peerDependenciesMeta": {
+    "borch": {
+      "optional": true
+    }
+  }
+}
