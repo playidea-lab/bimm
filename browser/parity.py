@@ -106,6 +106,11 @@ def _compare(result: dict, meta: dict[str, str]) -> int:
         return 1
 
     print(f"어댑터 — {result.get('adapter')}")
+    if result.get("mode") == "cargo":
+        # strict 로 실렸다는 것이 화물 검사의 절반이다. 열쇠가 하나라도 남거나
+        # 모자라면 브라우저가 그 자리에서 멈추므로, 여기까지 온 것 자체가 판정이다.
+        print(f"화물 열쇠 {result.get('loaded')}개를 strict 로 실었다"
+              f" — 허브의 로더와 같은 부름이다")
     warn_if_software(result.get("adapter"), "이 대조")
 
     # **우리가 안 실은 것을 갈렸다고 세면 안 된다.** `num_batches_tracked` 는 위에서
@@ -124,8 +129,11 @@ def _compare(result: dict, meta: dict[str, str]) -> int:
         if extra:
             print(f"  timm 이 주는데 모델이 안 받는다 ({len(extra)}): {extra[:6]}", file=sys.stderr)
         return 1
-    print(f"열쇠 {len(wanted)}개 — 이름이 timm 과 같다"
-          f" (num_batches_tracked {tracked}개는 양쪽에서 뺐다 — 추론에 안 쓰인다)")
+    if tracked:
+        print(f"열쇠 {len(wanted)}개 — 이름이 timm 과 같다"
+              f" (num_batches_tracked {tracked}개는 대조에서 뺐다 — 추론에 안 쓰인다)")
+    else:
+        print(f"열쇠 {len(wanted)}개 — 이름이 timm 과 같다")
 
     got = np.asarray(result["got"], dtype=np.float64)
     want = np.asarray(result["want"], dtype=np.float64)
@@ -152,18 +160,23 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--model", default="mobilenetv2_100")
     ap.add_argument("--pretrained", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--cargo", action="store_true",
+                    help="레지스트리에 올릴 화물 그대로 싣는다 (scripts/export.py 가 만든 것)")
     ap.add_argument("--headed", action="store_true")
     ap.add_argument("--headless", action="store_true")
     args = ap.parse_args(argv)
 
-    meta = _material(args.model, args.pretrained, args.seed)
+    # 화물 모드는 재료를 새로 담지 않는다 — 이미 만들어 둔 것을 그대로 실어야
+    # "올릴 파일이 실린다" 는 말이 성립한다.
+    meta = {} if args.cargo else _material(args.model, args.pretrained, args.seed)
     httpd, port = _serve()
     try:
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as pw, browser_of(pw, headed=not args.headless) as browser:
             page = browser.new_page()
-            page.goto(f"http://127.0.0.1:{port}/browser/parity.html")
+            page.goto(f"http://127.0.0.1:{port}/browser/parity.html"
+                      f"{'?cargo=1' if args.cargo else ''}")
             page.wait_for_function("window.__parity !== undefined", timeout=TIMEOUT_MS)
             result = json.loads(page.evaluate("JSON.stringify(window.__parity)"))
         return _compare(result, meta)
