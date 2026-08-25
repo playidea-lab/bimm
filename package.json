@@ -1,5 +1,5 @@
 {
-  "name": "bimm",
+  "name": "bimm-ts",
   "version": "0.1.0",
   "description": "borch 런타임 위의 모델 아키텍처 카탈로그 — timm 의 자리",
   "license": "Apache-2.0",
@@ -29,6 +29,10 @@
     "test:no-compare": "tsc -p tsconfig.json && node --test dist/test/args.test.js dist/test/registry.test.js"
   },
   "//": [
+    "이 패키지의 npm 이름은 `bimm-ts` 다. `bimm` 이 아니다 — 레지스트리의 유사성 필터가",
+    "bigi·bili·boom·jimp·mime·viem 과 가깝다며 403 으로 막았다(실측). 저장소 이름은 `bimm`",
+    "그대로다. 코어도 같은 자리에서 같은 일을 겪었고 같은 해법으로 나갔다.",
+    "",
     "코어의 npm 이름은 `borch-ts` 다. `borch` 가 아니다 — 그 이름은 레지스트리의 유사성",
     "필터가 막는다. 코어 자신이 `borch-ts` 로 나간 것이 그 증거이고, 그래서 여기 적힌",
     "이름과 소스의 import 가 둘 다 `borch-ts` 다.",
