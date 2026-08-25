@@ -33,6 +33,7 @@ import { nn } from "borch-ts";
 
 import { BimmError } from "./errors.js";
 import { checkArgs, type FactoryArgs } from "./args.js";
+import { MobileNetV2 } from "./mobilenet.js";
 import { ResNet18Cifar } from "./resnet.js";
 
 interface Factory {
@@ -47,6 +48,14 @@ const FACTORIES: Readonly<Record<string, Factory>> = {
     // `?? 1` 은 도달하지 않는다 — checkArgs 가 없는 인자를 이미 거절했다.
     // noUncheckedIndexedAccess 를 켠 값이 이런 자리를 눈에 보이게 하는 것이다.
     build: (args) => new ResNet18Cifar(args["numClasses"] ?? 1),
+  },
+  // timm 에서 옮겨 온 첫 아키텍처. 이름이 `timm/` 아래인 것은 **출신을 가리키는
+  // 규약**이고, 같은 표에 `borchvision/` 이 나란히 서는 지금이 이름공간을 둘로 받은
+  // 까닭이 처음으로 눈에 보이는 자리다 — timm 의 resnet18 과 torchvision 의
+  // resnet18 은 실제로 다른 모델이고 가중치가 안 호환된다.
+  "timm/mobilenetv2_100": {
+    spec: { numClasses: { kind: "int", min: 1 } },
+    build: (args) => new MobileNetV2(args["numClasses"] ?? 1),
   },
 };
 

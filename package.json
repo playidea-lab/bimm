@@ -26,6 +26,7 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build",
     "test": "tsc -p tsconfig.json && node --test dist/test/*.js",
+    "parity": "uv run --with playwright --with timm --with torch --with safetensors --with numpy python browser/parity.py",
     "test:no-compare": "tsc -p tsconfig.json && node --test dist/test/args.test.js dist/test/registry.test.js"
   },
   "//": [
