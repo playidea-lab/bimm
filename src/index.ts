@@ -3,7 +3,7 @@
  *
  * ```ts
  * import { init } from "borch-ts";
- * import { createModel, listModels } from "bimm";
+ * import { createModel, listModels } from "bimm-ts";
  *
  * await init();                                   // 층이 곧 텐서다
  * listModels();                                   // [{ library, factory }, …]
