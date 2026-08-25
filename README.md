@@ -4,7 +4,7 @@
 카탈로그.**
 
 ```
-borch        ←→  torch
+borch        ←→  torch          (npm 에서는 `borch-ts` — 아래를 보라)
 borchvision  ←→  torchvision
 bimm         ←→  timm
 borch-hub    ←→  (아무것도 아니다 — 아래를 보라)
@@ -17,7 +17,7 @@ borch-hub    ←→  (아무것도 아니다 — 아래를 보라)
 ## 쓰는 법
 
 ```ts
-import { init } from "borch";
+import { init } from "borch-ts";
 import { createModel, listModels } from "bimm";
 
 await init();                                   // 층이 곧 텐서다
@@ -70,14 +70,24 @@ timm 의 `create_model(pretrained=True)` 에 해당하는 일 — 매니페스�
 그 방향은 실제 생태계와도 같다. timm 은 아키텍처를 알고, 어디서 받아오는지는 그
 바깥의 일이다.
 
-## `borch` 는 peerDependency 다
+## 코어는 npm 에서 `borch-ts` 다
 
-이 패키지가 `borch` 를 끌고 오면 사용자의 것과 두 벌이 된다. 텐서 두 벌은 같은 GPU
+프로젝트 이름은 `borch` 인데 설치하는 이름은 `borch-ts` 다. 갈린 것이 아니라 **`borch`
+를 못 쓴다** — npm 레지스트리의 유사성 필터가 막는다. 코어 자신이 `borch-ts` 로 나간
+것이 그 증거이고, 그래서 이 패키지의 import 도 `borch-ts` 다.
+
+```
+npm i bimm borch-ts
+```
+
+## 코어는 peerDependency 다
+
+이 패키지가 코어를 끌고 오면 사용자의 것과 두 벌이 된다. 텐서 두 벌은 같은 GPU
 장치를 공유하지 않아서 **예외 없이 조용히 안 맞는다.** 쓰는 쪽이 이미 깔아둔 것을 쓴다.
 
-`borch` 는 아직 npm 에 없다 — 코어 공개와 같이 연다. 그때까지 타입은 옆에 나란히
-받아둔 코어의 선언 파일에서 오고, `optional` peer 인 것은 없는 패키지를 필수 peer 로
-두면 npm 이 lockfile 조차 못 만들기 때문이다(실측).
+`optional` peer 가 아닌 것은 `borch-ts` 0.1.0 이 실제로 나가 있기 때문이다. 없는
+패키지를 필수 peer 로 두면 npm 이 lockfile 조차 못 만들어서 한동안 optional 이었는데,
+그 조건이 아니게 됐다.
 
 ## 지금 카탈로그에 있는 것
 

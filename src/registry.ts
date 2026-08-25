@@ -29,7 +29,7 @@
  * 늘리는 것은 되지만 줄이는 것은 안 된다.
  */
 
-import { nn } from "borch";
+import { nn } from "borch-ts";
 
 import { BimmError } from "./errors.js";
 import { checkArgs, type FactoryArgs } from "./args.js";
