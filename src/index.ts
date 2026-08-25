@@ -2,7 +2,7 @@
  * bimm — **timm 의 자리.** 아키텍처 카탈로그와, 이름으로 그것을 만드는 함수.
  *
  * ```ts
- * import { init } from "borch";
+ * import { init } from "borch-ts";
  * import { createModel, listModels } from "bimm";
  *
  * await init();                                   // 층이 곧 텐서다

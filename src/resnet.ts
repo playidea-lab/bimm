@@ -11,8 +11,15 @@
  *
  * `borch/borch-ts/test/bench.ts` 다. 두 벌이고, 두 벌은 갈린다 — 그런데 합칠 수가
  * 없다. 코어가 이 패키지를 의존하면 순환이 되기 때문이다(이쪽이 코어를 peer 로
- * 잡는다). 그래서 합치는 대신 **대조한다**: 두 모델의 `stateDict` 열쇠와 모양이
- * 같은지 보는 검사가 붙는다. 갈리는 것을 막을 수 없으면 갈린 것을 잡는다.
+ * 잡는다). 그래서 합치는 대신 **대조한다**: `test/samemodel.test.ts` 가 두 소스에서
+ * 만들어지는 층을 순서대로 뽑고 `forward` 를 나란히 놓는다. 갈리는 것을 막을 수
+ * 없으면 갈린 것을 잡는다.
+ *
+ * `stateDict` 열쇠와 모양을 실제로 뽑는 쪽이 더 깊지만, 그러려면 모델을 만들어야
+ * 하고 층이 곧 텐서이므로 WebGPU 어댑터가 든다 — 그 대조는 브라우저 하네스가 있는
+ * 코어 쪽 일이다. 실제로 두 벌이 처음 갈린 사건은 코어의 `Conv2d` 가 `dilation` 과
+ * `groups` 를 `bias` 앞에 들이면서 이쪽 호출 넷이 여섯 인자에 남은 것이었고, 그것은
+ * 소스를 보는 층에서 그대로 보인다.
  *
  * ## 이름이 CIFAR 판임을 말한다
 
@@ -28,7 +35,7 @@
  * 같은 이름에 인자로 가르면 옛 매니페스트가 다른 모델을 만들게 된다.
  */
 
-import { nn, type Tensor } from "borch";
+import { nn, type Tensor } from "borch-ts";
 
 /**
  * ResNet 의 기본 블록. 지름길이 모양을 바꿔야 할 때만 1×1 을 둔다.
@@ -54,12 +61,12 @@ export class BasicBlock extends nn.Module {
 
   constructor(cin: number, cout: number, stride: number) {
     super();
-    this.conv1 = new nn.Conv2d(cin, cout, 3, stride, 1, false);
+    this.conv1 = new nn.Conv2d(cin, cout, 3, stride, 1, 1, 1, false);
     this.bn1 = new nn.BatchNormND(cout);
-    this.conv2 = new nn.Conv2d(cout, cout, 3, 1, 1, false);
+    this.conv2 = new nn.Conv2d(cout, cout, 3, 1, 1, 1, 1, false);
     this.bn2 = new nn.BatchNormND(cout);
     const shrinks = stride !== 1 || cin !== cout;
-    this.downConv = shrinks ? new nn.Conv2d(cin, cout, 1, stride, 0, false) : null;
+    this.downConv = shrinks ? new nn.Conv2d(cin, cout, 1, stride, 0, 1, 1, false) : null;
     this.downBn = shrinks ? new nn.BatchNormND(cout) : null;
   }
 
@@ -93,7 +100,7 @@ export class ResNet18Cifar extends nn.Module {
 
   constructor(numClasses: number) {
     super();
-    this.stem = new nn.Conv2d(3, STEM_CHANNELS, 3, 1, 1, false);
+    this.stem = new nn.Conv2d(3, STEM_CHANNELS, 3, 1, 1, 1, 1, false);
     this.bn = new nn.BatchNormND(STEM_CHANNELS);
     this.body = new nn.Sequential([
       new BasicBlock(64, 64, 1), new BasicBlock(64, 64, 1),

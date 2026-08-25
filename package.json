@@ -1,6 +1,6 @@
 {
   "name": "bimm",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "borch 런타임 위의 모델 아키텍처 카탈로그 — timm 의 자리",
   "license": "Apache-2.0",
   "type": "module",
@@ -19,32 +19,32 @@
     "LICENSE"
   ],
   "peerDependencies": {
-    "borch": "^0.1.0"
+    "borch-ts": "^0.1.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build",
-    "test": "tsc -p tsconfig.json && node --test dist/test/*.js"
+    "test": "tsc -p tsconfig.json && node --test dist/test/*.js",
+    "test:no-compare": "tsc -p tsconfig.json && node --test dist/test/args.test.js dist/test/registry.test.js"
   },
   "//": [
-    "version 0.0.0 이다 — 아직 아무것도 나가지 않았다. 코어 npm `borch` 와 `borch-hub` 가",
-    "같은 이유로 0.0.0 에서 시작했다.",
+    "코어의 npm 이름은 `borch-ts` 다. `borch` 가 아니다 — 그 이름은 레지스트리의 유사성",
+    "필터가 막는다. 코어 자신이 `borch-ts` 로 나간 것이 그 증거이고, 그래서 여기 적힌",
+    "이름과 소스의 import 가 둘 다 `borch-ts` 다.",
     "",
-    "borch 는 peerDependency 다. 이 패키지가 borch 를 끌고 오면 사용자의 borch 와 두 벌이",
-    "되고, 텐서 두 벌은 같은 GPU 장치를 공유하지 않아 조용히 안 맞는다.",
+    "peerDependency 인 이유: 이 패키지가 코어를 끌고 오면 사용자의 것과 두 벌이 되고,",
+    "텐서 두 벌은 같은 GPU 장치를 공유하지 않아 조용히 안 맞는다. optional 이 아닌 것은",
+    "0.1.0 이 실제로 나가 있기 때문이다 — 없는 패키지를 필수 peer 로 두면 npm 이 lockfile",
+    "조차 못 만들지만(실측), 이제 그 조건이 아니다.",
     "",
-    "borch 0.1.0 은 아직 npm 에 없으므로 optional peer 다 — 없는 패키지를 필수 peer 로 두면",
-    "npm 이 lockfile 조차 못 만든다. borch 가 나가는 날 optional 을 뗀다."
+    "devDependency 에도 같은 것이 있다. peer 는 사용자가 무엇을 깔아야 하는지를 말하고,",
+    "dev 는 우리 검사가 무엇 위에서 도는지를 말한다 — 둘은 다른 질문이다."
   ],
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@webgpu/types": "^0.1.71",
+    "borch-ts": "^0.1.0",
     "typescript": "^5.9.0"
-  },
-  "peerDependenciesMeta": {
-    "borch": {
-      "optional": true
-    }
   }
 }

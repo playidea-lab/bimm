@@ -1,0 +1,63 @@
+# 컴파일과 검사. PR 마다 돈다.
+#
+# ## 갈래가 거의 없는 이유
+#
+# 코어는 npm 에 `borch-ts` 로 있다. 타입도 값도 거기서 오므로 `npm ci` 한 번이면
+# 검사 대부분이 토큰 없이 돈다 — 이웃 저장소가 두 갈래를 만들어야 했던 것은 코어가
+# npm 에 없던 시절의 사정이고, 그 사정은 끝났다.
+#
+# 남은 갈래 하나는 **대조 검사**다. 코어의 벤치(`borch-ts/test/bench.ts`)는 공개
+# 진입점이 아니라 npm 배포에 실리지 않고, 저장소는 private 이라 러너가 그냥 못 받는다.
+# 토큰이 있으면 받아서 대조까지 보고, 없으면 나머지를 전부 보고 **경고를 남긴다** —
+# 말없이 건너뛰면 초록색이 "다 봤다"로 읽히는데, 안 본 것이 있으면 그건 거짓말이다.
+#
+# 토큰 이름: CORE_REPO_TOKEN (playidea-lab/borch 읽기 권한).
+name: 검사
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # secrets 는 step 의 if 에서 못 읽는다 — env 로 한 번 옮기면 읽을 수 있다.
+    env:
+      CORE_TOKEN: ${{ secrets.CORE_REPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+
+      # 대조는 벤치를 **텍스트로 읽을 뿐이라** 코어를 빌드하지 않는다. checkout 이면 된다.
+      - name: 코어 받기 (대조 검사용)
+        id: core
+        if: env.CORE_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: playidea-lab/borch
+          token: ${{ env.CORE_TOKEN }}
+          path: core-checkout
+
+      # 대조 검사가 `../borch` 를 본다. 러너의 작업 디렉터리 옆으로 옮기면 로컬에서
+      # 나란히 받아둔 것과 같은 배치가 된다.
+      - name: 코어를 옆자리로
+        if: steps.core.outcome == 'success'
+        run: mv core-checkout ../borch
+
+      - name: 검사 (대조 포함)
+        if: steps.core.outcome == 'success'
+        run: npm test
+
+      - name: 검사 (대조 제외 — 코어를 못 받았다)
+        if: steps.core.outcome != 'success'
+        run: npm run test:no-compare
+
+      - name: 무엇을 못 봤는지 남긴다
+        if: steps.core.outcome != 'success'
+        run: |
+          echo "::warning::CORE_REPO_TOKEN 이 없어 대조 검사를 못 돌렸습니다 — 카탈로그가 코어의 정의와 갈렸는지를 이번 실행은 보지 않았습니다."
