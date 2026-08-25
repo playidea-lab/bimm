@@ -6,7 +6,7 @@
 ```
 borch        ←→  torch          (npm 에서는 `borch-ts` — 아래를 보라)
 borchvision  ←→  torchvision
-bimm         ←→  timm
+bimm         ←→  timm           (npm 에서는 `bimm-ts` — 아래를 보라)
 borch-hub    ←→  (아무것도 아니다 — 아래를 보라)
 ```
 
