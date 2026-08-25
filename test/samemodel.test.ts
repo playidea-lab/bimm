@@ -116,6 +116,25 @@ function classBody(source: string, name: string): string {
 }
 
 /**
+ * 필드 선언을 **적힌 순서대로** 뽑는다.
+ *
+ * `stateDict` 의 열쇠가 여기서 나온다. 층 구성이 똑같아도 `stem` 을 `head` 로 고치면
+ * **이미 배포된 가중치가 안 실린다** — 아래 `layers` 는 `new nn.Conv2d(...)` 호출만
+ * 보므로 그 갈림을 못 본다. 열쇠를 실제로 뽑으려면 모델을 세워야 하고 그러려면
+ * WebGPU 어댑터가 드는데, 열쇠가 어디서 오는지는 어댑터 없이도 안다.
+ */
+function fields(body: string): readonly string[] {
+  const found = [];
+  const decl = /(?:private|protected|public)\s+(?:readonly\s+)?(\w+)\s*:\s*([^;]+);/g;
+  let hit = decl.exec(body);
+  while (hit !== null) {
+    found.push(`${hit[1] ?? ""}: ${(hit[2] ?? "").replace(/\s+/g, " ").trim()}`);
+    hit = decl.exec(body);
+  }
+  return found;
+}
+
+/**
  * 만들어지는 층을 **나오는 순서대로** 뽑는다.
  *
  * `nn.Sequential([...])` 은 인자에 다시 `new` 가 들어 있어 여기서 앞이 잘리는데,
@@ -164,6 +183,21 @@ test("ResNet-18 이 만드는 층이 코어의 것과 같다", () => {
   assert.deepEqual(
     layers(classBody(ours, "ResNet18")),
     layers(classBody(core, "ResNet18")),
+  );
+});
+
+test("블록의 필드 이름과 형이 코어의 것과 같다", () => {
+  // stateDict 열쇠가 이 이름에서 나온다. 여기서 갈리면 가중치가 안 실린다.
+  assert.deepEqual(
+    fields(classBody(ours, "Block")),
+    fields(classBody(core, "Block")),
+  );
+});
+
+test("ResNet-18 의 필드 이름과 형이 코어의 것과 같다", () => {
+  assert.deepEqual(
+    fields(classBody(ours, "ResNet18")),
+    fields(classBody(core, "ResNet18")),
   );
 });
 
