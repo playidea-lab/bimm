@@ -18,7 +18,7 @@ borch-hub    ←→  (아무것도 아니다 — 아래를 보라)
 
 ```ts
 import { init } from "borch-ts";
-import { createModel, listModels } from "bimm";
+import { createModel, listModels } from "bimm-ts";
 
 await init();                                   // 층이 곧 텐서다
 listModels();                                   // [{ library: "borchvision", factory: "resnet18_cifar" }]
@@ -70,15 +70,25 @@ timm 의 `create_model(pretrained=True)` 에 해당하는 일 — 매니페스�
 그 방향은 실제 생태계와도 같다. timm 은 아키텍처를 알고, 어디서 받아오는지는 그
 바깥의 일이다.
 
-## 코어는 npm 에서 `borch-ts` 다
-
-프로젝트 이름은 `borch` 인데 설치하는 이름은 `borch-ts` 다. 갈린 것이 아니라 **`borch`
-를 못 쓴다** — npm 레지스트리의 유사성 필터가 막는다. 코어 자신이 `borch-ts` 로 나간
-것이 그 증거이고, 그래서 이 패키지의 import 도 `borch-ts` 다.
+## npm 에서는 둘 다 `-ts` 가 붙는다
 
 ```
-npm i bimm borch-ts
+npm i bimm-ts borch-ts
 ```
+
+저장소 이름은 `bimm` 이고 코어는 `borch` 인데, 설치하는 이름은 둘 다 뒤에 `-ts` 가
+붙는다. 갈린 것이 아니라 **그 두 이름을 못 쓴다** — npm 레지스트리의 유사성 필터가
+막는다. 코어가 먼저 겪었고, 이 패키지도 게시하려다 같은 자리에서 403 을 받았다:
+
+```
+Package name too similar to existing packages bigi,bili,boom,jimp,mime,viem
+```
+
+네 글자 이름이 이미 붐비는 곳이라 그렇다. 스코프(`@playidealab/bimm`)를 쓰면 필터를
+아예 우회하지만, 그러면 코어와 설치 줄의 모양이 갈린다. **같은 규칙으로 읽히는 편이
+낫다고 보고 코어가 쓴 해법을 그대로 따랐다.**
+
+문서와 대화에서 부르는 이름은 계속 `bimm` 이다 — 설치하는 이름만 다르다.
 
 ## 코어는 peerDependency 다
 
