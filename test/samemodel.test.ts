@@ -38,27 +38,48 @@ const OURS = join(ROOT, "src", "resnet.ts");
 /**
  * 코어를 **옆에 나란히** 받아둔 것으로 본다.
  *
- * 이 경로는 한때 타입을 빌려오던 자리이기도 했는데, 이제 타입도 값도 npm 의
- * `borch-ts` 에서 온다. **여기만 옆 저장소를 보는 이유가 남았다**: 벤치는 코어의
- * 공개 진입점이 아니라 배포에 실리지 않으므로, 설치본에는 대조할 원본이 없다.
+ * ## 벤치를 두 자리에서 찾는다
  *
- * 그래서 이 검사가 보는 것은 **우리가 지금 서 있는 판(npm 0.1.0)이 아니라 코어의
- * 최신 판**이다. 여기서 갈렸다고 나오면 "오늘 깨졌다"가 아니라 "다음 코어 릴리스에서
- * 깨진다"는 뜻이고, 그것이 이 검사를 앞당겨 두는 값이다.
+ * **설치된 `borch-ts` 안**을 먼저 본다. 벤치는 코어의 진입점이 아니지만(`exports` 에
+ * 없어 아무도 임포트할 수 없다) 배포에는 실리므로, 경로로 읽는 이 검사에는 그것으로
+ * 충분하다 — 그러면 `npm ci` 한 번으로 CI 에서도 대조가 돈다.
  *
- * 코어가 옆에 없으면 조용히 건너뛰지 않고 그 사실을 말한다: 건너뛴 대조는 통과한
+ * 없으면 **옆에 나란히 받아둔 코어**로 물러난다. 코어 0.1.0 에는 벤치가 아직 안 실려
+ * 있어서 지금은 대개 이쪽이 쓰인다. 그 판이 나가면 이 갈래는 저절로 앞의 것으로 옮겨
+ * 간다 — 무엇을 봤는지는 실패했을 때 경로로 말한다.
+ *
+ * 두 자리는 서로 다른 판을 가리킬 수 있다. 설치본은 **우리가 지금 서 있는 판**이고
+ * 옆 저장소는 **코어의 최신 판**이라, 뒤쪽에서 갈렸다고 나오면 "오늘 깨졌다"가 아니라
+ * "다음 코어 릴리스에서 깨진다"는 뜻이다. 둘 다 값이 있고, 앞의 것이 더 정확하다.
+ *
+ * 어느 자리에도 없으면 조용히 건너뛰지 않고 그 사실을 말한다: 건너뛴 대조는 통과한
  * 대조와 초록색이 같아서, 갈린 것을 잡으라고 둔 검사가 아무것도 안 보게 된다.
  */
-const CORE = join(ROOT, "..", "borch", "borch-ts", "test", "bench.ts");
+const CORE_CANDIDATES = [
+  join(ROOT, "node_modules", "borch-ts", "borch-ts", "test", "bench.ts"),
+  join(ROOT, "..", "borch", "borch-ts", "test", "bench.ts"),
+] as const;
+
+function readCore(): string {
+  for (const path of CORE_CANDIDATES) {
+    try {
+      return readFileSync(path, "utf8");
+    } catch {
+      // 다음 자리를 본다. 어느 자리에도 없을 때만 말한다.
+    }
+  }
+  throw new Error(
+    "대조할 코어의 벤치를 못 찾았습니다. 본 자리:\n" +
+      CORE_CANDIDATES.map((p) => `  ${p}`).join("\n") +
+      "\n  설치된 borch-ts 에 벤치가 실리기 전 판이라면, 코어를 이 저장소 옆에 받아 두어야 합니다.",
+  );
+}
 
 function read(path: string): string {
   try {
     return readFileSync(path, "utf8");
   } catch {
-    throw new Error(
-      `대조할 소스를 못 읽었습니다: ${path}\n` +
-        "  코어를 이 저장소 옆에 받아 두어야 합니다 — 벤치는 npm 배포에 실리지 않습니다.",
-    );
+    throw new Error(`대조할 소스를 못 읽었습니다: ${path}`);
   }
 }
 
@@ -129,7 +150,7 @@ function forwardBody(body: string): string {
 }
 
 const ours = rename(stripComments(read(OURS)));
-const core = stripComments(read(CORE));
+const core = stripComments(readCore());
 
 test("블록이 만드는 층이 코어의 것과 같다", () => {
   // 코어의 Conv2d 가 dilation·groups 를 bias 앞에 들였을 때 갈린 자리가 여기다.
