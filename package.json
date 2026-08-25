@@ -49,7 +49,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@webgpu/types": "^0.1.71",
-    "borch-ts": "^0.1.0",
+    "borch-ts": "^0.1.1",
     "typescript": "^5.9.0"
   }
 }

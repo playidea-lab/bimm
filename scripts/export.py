@@ -95,6 +95,14 @@ def main(argv: list[str]) -> int:
             "inputSize": list(cfg["input_size"]),
             "mean": list(cfg["mean"]),
             "std": list(cfg["std"]),
+            # **크기만 맞춰서는 안 된다.** timm 은 짧은 변을 `input/crop_pct` 로 키운
+            # 뒤 가운데를 자른다. 이것을 안 넘기면 받는 쪽이 이미지를 늘려 넣고,
+            # 모델은 실리는데 이름이 틀리게 나온다 — 왕복 검사에서 실측으로 걸렸다.
+            "cropPct": cfg.get("crop_pct"),
+            "resizeShortSide": int(cfg["input_size"][1] / cfg["crop_pct"]),
+            # timm 이 쓰는 보간. 코어와 레지스트리 스키마가 아는 것은 bilinear·nearest
+            # 뿐이라 bicubic 은 그대로 못 옮긴다 — 무엇을 못 옮겼는지 남긴다.
+            "interpolation": cfg.get("interpolation"),
         },
         "numClasses": model.num_classes,
         "publishedTop1": cfg.get("top1"),
