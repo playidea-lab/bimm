@@ -22,7 +22,16 @@ const LIBRARY = "borchvision";
 const FACTORY = "resnet18_cifar";
 
 test("카탈로그가 실린 이름을 든다", () => {
-  assert.deepEqual(listModels(), [{ library: LIBRARY, factory: FACTORY }]);
+  assert.deepEqual(listModels(), [
+    { library: LIBRARY, factory: FACTORY },
+    { library: "timm", factory: "mobilenetv2_100" },
+  ]);
+});
+
+test("같은 표에 라이브러리가 둘 선다", () => {
+  // 이름을 둘로 받은 까닭이 여기서 처음 눈에 보인다 — 표 하나가 두 출신을 든다.
+  const libraries = new Set(listModels().map((f) => f.library));
+  assert.deepEqual([...libraries].sort(), ["borchvision", "timm"]);
 });
 
 test("카탈로그는 정해진 순서로 나온다", () => {

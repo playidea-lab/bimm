@@ -24,5 +24,6 @@
 
 export { createModel, factorySpec, listModels, type FactoryName } from "./registry.js";
 export { checkArgs, type ArgSpec, type FactoryArgs } from "./args.js";
+export { MobileNetV2 } from "./mobilenet.js";
 export { BasicBlock, ResNet18Cifar } from "./resnet.js";
 export { BimmError } from "./errors.js";
