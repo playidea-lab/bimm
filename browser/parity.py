@@ -43,22 +43,41 @@ TIMEOUT_MS = 300_000
 # 허용 오차. 비트 일치는 이 프로젝트의 명시적 비목표이고, 브라우저의 fp32 는 곱셈
 # 순서가 torch 와 다르다.
 #
-# **1e-4 는 헐거웠다.** 실제로 옮긴 모델이 내는 차이는 훨씬 작다:
+# **두 모드는 다른 것을 잰다.**
 #
-#     mobilenetv2_100          6.2e-06 (랜덤) · 3.8e-06 (pretrained)
-#     mobilenetv3_large_100    3.7e-08
-#     mobilenetv3_small_100    2.8e-09
+# 재료 모드(랜덤 초기화)가 재는 것은 **구조**다. 층 하나가 어긋나면 랜덤 값은 그것을
+# 그대로 드러낸다. 실측:
 #
-# 그 위에 놓인 1e-4 는 **틀린 구조를 통과시켰다.** V3 의 머리를 V2 처럼 뒤집으면
-# (평균과 1×1 의 순서를 바꾸면) 6.9e-05 가 나오는데 옛 허용치 아래다. 1×1 과 평균은
-# 둘 다 선형이라 거의 교환되고 사이의 hardswish 도 대부분 구간에서 거의 선형이라,
-# **구조가 다른데 수는 가깝다.** 검사가 잡아야 하는 것이 정확히 그런 자리다.
+#     mobilenetv2_100        5.2e-06
+#     mobilenetv3_large_100  2.1e-08
+#     mobilenetv3_small_100  1.9e-09
 #
-# 1e-5 는 실측 최대(6.2e-06)의 1.6 배다. 좁지만 그 수는 랜덤 초기화의 것이고, 모델이
-# 늘어 이 여유가 모자라면 **허용치를 늘리기 전에 그 모델을 먼저 볼 것** — 지금까지
-# 여유가 모자랐던 경우는 전부 구현이 틀렸을 때였다.
-ATOL = 1e-5
-RTOL = 1e-5
+# 이 수들은 시드를 모델보다 먼저 걸고 나서야 **재현된다.** 그 전에는 같은 명령이
+# 6.2e-06 과 7.6e-06 을 번갈아 냈다.
+#
+# 화물 모드(사전학습)가 재는 것은 **이 바이트가 원본의 수를 재현하는가**다. 구조는
+# 재료 모드가 이미 봤고, 여기서 커지는 것은 학습된 값의 크기와 BatchNorm 의 분산이
+# 오차를 키우기 때문이다 — 같은 코드에 가중치만 바꿔 확인했다:
+#
+#     mobilenetv3_small_100  랜덤 1.0e-09 · 사전학습 1.6e-05
+#
+# 그래서 하나의 수로 둘을 재면 한쪽이 반드시 틀린다. 1e-5 하나로 조였더니 멀쩡한
+# 화물(1.6e-05)이 걸렸고, 1e-4 하나로 두면 재료 쪽이 실측보다 두 자리 위가 된다.
+#
+# 재료 1e-5 는 실측 최대(5.2e-06)의 1.9 배다. 좁게 잡은 까닭은 **구조가 틀리면 랜덤
+# 값에서 두 자리 아래로는 절대 안 나오기 때문**이다 — 여유를 크게 두어 얻는 것이
+# 없다. 화물 5e-5 는 실측 최대(1.6e-05)의 3 배다.
+#
+# **여기서 한 번 틀린 인과를 적었다.** 시드를 고치기 전에는 V3 의 머리를 뒤집어도
+# 6.9e-05 로 통과했고, 그것이 허용치를 조이는 근거로 적혀 있었다. 시드를 모델 앞으로
+# 옮기고 같은 실험을 하니 5.0e-01 로 갈린다 — 그 "거의 통과" 는 그날 뽑힌 가중치의
+# 우연이었지 허용치 문제가 아니었다. 진짜로 헐거웠던 것은 **재료가 재현되지 않는
+# 것**이었고, 조인 허용치는 그것과 별개로 정당한 채 남았다.
+#
+# 여유가 모자라는 날이 오면 **허용치를 늘리기 전에 그 모델을 재료 모드로 먼저 볼 것.**
+# 구조가 맞다면 그쪽은 두 자리 아래에서 통과한다.
+ATOL_MATERIAL = 1e-5
+ATOL_CARGO = 5e-5
 
 
 def _material(model_name: str, pretrained: bool, seed: int) -> dict[str, str]:
@@ -67,10 +86,13 @@ def _material(model_name: str, pretrained: bool, seed: int) -> dict[str, str]:
     import torch
     from safetensors.torch import save_file
 
+    # **시드가 모델보다 먼저다.** 입력 직전에만 걸면 랜덤 초기화 가중치가 실행마다
+    # 달라지고, 그러면 이 검사가 내는 수도 달라진다 — 같은 코드에서 6.2e-06 과
+    # 7.6e-06 이 번갈아 나왔다. 재현되지 않는 수 위에는 허용치를 세울 수 없다.
+    torch.manual_seed(seed)
     model = timm.create_model(model_name, pretrained=pretrained)
     model.eval()
 
-    torch.manual_seed(seed)
     x = torch.randn(1, 3, 224, 224)
     with torch.no_grad():
         y = model(x)
@@ -157,14 +179,15 @@ def _compare(result: dict, meta: dict[str, str]) -> int:
         return 1
 
     gap = np.abs(got - want)
-    tol = ATOL + RTOL * np.abs(want)
+    atol = ATOL_CARGO if result.get("mode") == "cargo" else ATOL_MATERIAL
+    tol = atol + atol * np.abs(want)
     worst = int(np.argmax(gap - tol))
     if np.any(gap > tol):
         print(f"수가 갈렸다 — [{worst}] {got[worst]:.9g} ≠ {want[worst]:.9g} "
-              f"(최대 차 {gap.max():.3e})", file=sys.stderr)
+              f"(최대 차 {gap.max():.3e}, 허용 {atol})", file=sys.stderr)
         return 1
 
-    print(f"수 {got.size}개 — 최대 절대차 {gap.max():.3e} (허용 {ATOL})")
+    print(f"수 {got.size}개 — 최대 절대차 {gap.max():.3e} (허용 {atol})")
     print(f"가장 큰 값의 자리도 같다 — {int(np.argmax(got))} 대 {int(np.argmax(want))}")
     return 0 if int(np.argmax(got)) == int(np.argmax(want)) else 1
 
@@ -191,7 +214,7 @@ def main(argv: list[str]) -> int:
         with sync_playwright() as pw, browser_of(pw, headed=not args.headless) as browser:
             page = browser.new_page()
             page.goto(f"http://127.0.0.1:{port}/browser/parity.html"
-                      f"{'?cargo=1' if args.cargo else ''}")
+                      f"{'?cargo=' + args.model if args.cargo else ''}")
             page.wait_for_function("window.__parity !== undefined", timeout=TIMEOUT_MS)
             result = json.loads(page.evaluate("JSON.stringify(window.__parity)"))
         return _compare(result, meta)

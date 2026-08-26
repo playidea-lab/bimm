@@ -32,7 +32,11 @@
 
     // 두 가지를 본다. 기본은 **아키텍처가 같은가**(parity.py 가 담은 재료 한 덩이),
     // `?cargo=1` 은 **화물이 실리는가**(레지스트리에 올릴 파일 그대로).
-    const cargo = new URLSearchParams(location.search).get("cargo") === "1";
+    // `?cargo=<모델 이름>` — 화물이 모델마다 자기 자리에 있으므로 어느 것인지 말한다.
+    // 옛 `?cargo=1` 은 자리가 하나였을 때의 형태다.
+    const asked = new URLSearchParams(location.search).get("cargo");
+    const cargo = asked !== null;
+    const where = asked === "1" ? "/out/cargo" : `/out/cargo/${asked}`;
 
     const grab = async (path) => {
       const res = await fetch(path);
@@ -44,10 +48,10 @@
     if (cargo) {
       // 화물은 세 파일로 나뉘어 있고, **strict 로 싣는다** — 허브의 로더가 그렇게
       // 부르기 때문이다. 열쇠가 하나라도 남거나 모자라면 여기서 멈춘다.
-      const summary = await (await fetch("/out/cargo/summary.json")).json();
-      given = (await grab("/out/cargo/model.safetensors")).tensors;
-      input = (await grab("/out/cargo/sample.in.safetensors")).tensors["input"];
-      want = (await grab("/out/cargo/sample.out.safetensors")).tensors["output"];
+      const summary = await (await fetch(`${where}/summary.json`)).json();
+      given = (await grab(`${where}/model.safetensors`)).tensors;
+      input = (await grab(`${where}/sample.in.safetensors`)).tensors["input"];
+      want = (await grab(`${where}/sample.out.safetensors`)).tensors["output"];
       spec = { library: "timm", factory: summary.source.model,
                numClasses: summary.numClasses };
       strict = true;
