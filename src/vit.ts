@@ -101,8 +101,9 @@ class Attention extends nn.Module {
     const kf = k.reshape(folded);
     const vf = v.reshape(folded);
 
-    // **`transpose()` 는 2 차원 전용이다**(코어가 그렇게 말한다). 3 차원에서 마지막
-    // 두 축을 바꾸려면 `permute` 다.
+    // **`transpose()` 는 2 차원 전용이다**(코어가 그렇게 말한다). 3 차원에는
+    // `permute` 나 `swapaxes(-2, -1)` 를 쓴다 — 토치에서 둘은 같은 함수인데
+    // 여기선 별칭 쪽만 랭크를 안 가린다(borch#89).
     const scores = qf.bmm(kf.permute([0, 2, 1]));            // [B*H, N, N]
     const weights = scores.softmax(-1);
     const mixed = weights.bmm(vf);                           // [B*H, N, d]
