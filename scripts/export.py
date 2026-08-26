@@ -40,7 +40,11 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-CARGO = ROOT / "out" / "cargo"
+def cargo_dir(model: str) -> pathlib.Path:
+    """화물은 모델마다 자기 자리에 놓는다. 한 자리를 쓰면 두 번째 export 가 첫 번째를
+    덮고, 덮인 줄 모른 채 매니페스트를 만들면 **다른 모델의 바이트에 이 모델의 이름이
+    붙는다.**"""
+    return ROOT / "out" / "cargo" / model
 
 
 def main(argv: list[str]) -> int:
@@ -69,6 +73,7 @@ def main(argv: list[str]) -> int:
         for k, v in model.state_dict().items()
     }
 
+    CARGO = cargo_dir(args.model)
     CARGO.mkdir(parents=True, exist_ok=True)
     save_file(weights, str(CARGO / "model.safetensors"),
               metadata={"source": f"timm {timm.__version__} / {args.model}"})
