@@ -80,7 +80,7 @@ ATOL_MATERIAL = 1e-5
 ATOL_CARGO = 5e-5
 
 
-def _material(model_name: str, pretrained: bool, seed: int) -> dict[str, str]:
+def _material(model_name: str, pretrained: bool, seed: int, res: int = 224) -> dict[str, str]:
     """timm 을 세워 가중치·입력·기대 출력을 safetensors 하나에 담는다."""
     import timm
     import torch
@@ -93,7 +93,7 @@ def _material(model_name: str, pretrained: bool, seed: int) -> dict[str, str]:
     model = timm.create_model(model_name, pretrained=pretrained)
     model.eval()
 
-    x = torch.randn(1, 3, 224, 224)
+    x = torch.randn(1, 3, res, res)
     with torch.no_grad():
         y = model(x)
 
@@ -198,6 +198,9 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--model", default="mobilenetv2_100")
     ap.add_argument("--pretrained", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
+    # 입력 크기는 중간 활성화의 크기를 정한다 — 브라우저가 어디서 버티지 못하는지
+    # 가를 때 쓴다. 대조 자체는 어떤 크기에서도 성립한다(양쪽에 같은 것을 넣는다).
+    ap.add_argument("--res", type=int, default=224)
     ap.add_argument("--cargo", action="store_true",
                     help="레지스트리에 올릴 화물 그대로 싣는다 (scripts/export.py 가 만든 것)")
     ap.add_argument("--headed", action="store_true")
@@ -206,17 +209,47 @@ def main(argv: list[str]) -> int:
 
     # 화물 모드는 재료를 새로 담지 않는다 — 이미 만들어 둔 것을 그대로 실어야
     # "올릴 파일이 실린다" 는 말이 성립한다.
-    meta = {} if args.cargo else _material(args.model, args.pretrained, args.seed)
+    meta = {} if args.cargo else _material(args.model, args.pretrained, args.seed, args.res)
     httpd, port = _serve()
+    # **어디까지 갔는지 말한다.** 이 하네스가 조용히 매달린 적이 있고, 그때 로그는
+    # "재료를 담았다" 에서 끝나 있었다 — 브라우저를 여는 중인지, 페이지를 기다리는
+    # 중인지 알 수가 없었다. 한 줄씩 흘려보내면 멈춘 자리가 마지막 줄이 된다.
+    say = lambda what: print(f"  … {what}", flush=True)
+    say(f"서버 {port}")
     try:
         from playwright.sync_api import sync_playwright
 
-        with sync_playwright() as pw, browser_of(pw, headed=not args.headless) as browser:
-            page = browser.new_page()
-            page.goto(f"http://127.0.0.1:{port}/browser/parity.html"
-                      f"{'?cargo=' + args.model if args.cargo else ''}")
-            page.wait_for_function("window.__parity !== undefined", timeout=TIMEOUT_MS)
-            result = json.loads(page.evaluate("JSON.stringify(window.__parity)"))
+        say("playwright 진입")
+        with sync_playwright() as pw:
+            say("브라우저 여는 중")
+            with browser_of(pw, headed=not args.headless) as browser:
+                say("페이지 만드는 중")
+                page = browser.new_page()
+                # **콘솔을 읽는다.** 코어는 디바이스를 잃으면 거기에 남기는데, 그것을
+                # 안 읽으면 원인이 화면 밖에 남는다.
+                page.on("console", lambda m: (
+                    print(f"  [browser] {m.text}", flush=True)
+                    if m.type in ("error", "warning") else None))
+                url = (f"http://127.0.0.1:{port}/browser/parity.html"
+                       f"{'?cargo=' + args.model if args.cargo else ''}")
+                say(f"이동 {url}")
+                page.goto(url)
+                say("페이지가 답하기를 기다린다")
+                page.wait_for_function("window.__parity !== undefined", timeout=TIMEOUT_MS)
+                say("받았다 — 조각내어 가져온다")
+                # **한 번에 가져오면 매달린다.** 큰 배열이 든 객체를 통째로
+                # 직렬화해 CDP 로 넘기다 멈추는 것을 실측했다(efficientnet_b1,
+                # 네 번 연속). 조각으로 나누면 지나가고, 멈추더라도 어느 열쇠에서
+                # 멈췄는지가 남는다.
+                result = {}
+                for key in page.evaluate("Object.keys(window.__parity)"):
+                    say(f"조각 {key}")
+                    raw = page.evaluate(
+                        f"JSON.stringify(window.__parity[{json.dumps(key)}])")
+                    # `JSON.stringify(undefined)` 는 undefined 를 돌려주고 여기서
+                    # None 이 된다. 그것을 그대로 json.loads 에 넣으면 진단하려던
+                    # 실행이 **진단 코드 때문에** 죽는다(실측).
+                    result[key] = None if raw is None else json.loads(raw)
         return _compare(result, meta)
     finally:
         httpd.shutdown()

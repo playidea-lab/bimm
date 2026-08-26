@@ -23,7 +23,7 @@
 }
 </script>
 <script type="module">
-  import { Device, decode, init } from "borch-ts";
+  import { Device, currentDevice, decode, init } from "borch-ts";
   import { createModel } from "bimm-ts";
 
   const out = document.getElementById("out");
@@ -83,6 +83,19 @@
 
     const got = model.forward(input);
 
+    // **디바이스를 잃었는지 묻는다.** 잃으면 그 뒤의 수는 전부 뜻이 없는데 예외가
+    // 안 난다 — 코어가 그래서 이것을 물어볼 수 있는 상태로 두었고(`device.ts`),
+    // 그 자리를 안 쓰면 여기서는 "매달렸다" 로만 보인다(실측: efficientnet_b1).
+    const device = currentDevice();
+    if (!device.alive) {
+      window.__parity = {
+        error: `디바이스를 잃었다: ${JSON.stringify(device.lost)}`,
+        adapter: Device.adapterInfo,
+      };
+      out.textContent = "디바이스를 잃었다";
+      throw new Error("device lost");
+    }
+
     window.__parity = {
       adapter: Device.adapterInfo,
       // 무엇을 어떻게 실었는지. 화물 모드의 strict 는 이 검사의 요점이므로 말한다.
@@ -98,7 +111,12 @@
     };
     out.textContent = `났다 — ${got.shape.join("×")}`;
   } catch (err) {
-    window.__parity = { error: String((err && err.stack) || err) };
+    let lost = null;
+    try { const d = currentDevice(); lost = d.alive ? null : d.lost; } catch { /* 코어가 서기도 전이면 물을 것이 없다 */ }
+    window.__parity = {
+      error: String((err && err.stack) || err),
+      ...(lost === null ? {} : { deviceLost: lost }),
+    };
     out.textContent = `안 됐다: ${err}`;
   }
 </script>
