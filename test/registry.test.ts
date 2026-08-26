@@ -25,6 +25,8 @@ test("카탈로그가 실린 이름을 든다", () => {
   assert.deepEqual(listModels(), [
     { library: LIBRARY, factory: FACTORY },
     { library: "timm", factory: "mobilenetv2_100" },
+    { library: "timm", factory: "mobilenetv3_large_100" },
+    { library: "timm", factory: "mobilenetv3_small_100" },
   ]);
 });
 
