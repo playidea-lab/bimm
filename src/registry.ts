@@ -38,6 +38,7 @@ import {
 } from "./efficientnet.js";
 import { MobileNetV2 } from "./mobilenet.js";
 import { mobilenetv3Large, mobilenetv3Small } from "./mobilenetv3.js";
+import { vitTinyPatch16 } from "./vit.js";
 import { ResNet18Cifar } from "./resnet.js";
 
 interface Factory {
@@ -69,6 +70,12 @@ const FACTORIES: Readonly<Record<string, Factory>> = {
   "timm/mobilenetv3_small_100": {
     spec: { numClasses: { kind: "int", min: 1 } },
     build: (args) => mobilenetv3Small(args["numClasses"] ?? 1),
+  },
+  // 합성곱이 아닌 첫 아키텍처. 표에 이름 하나가 늘어난 것으로 보이지만, 뼈대가
+  // 다르므로 `vit.ts` 첫 문단을 읽고 손대는 편이 낫다.
+  "timm/vit_tiny_patch16_224": {
+    spec: { numClasses: { kind: "int", min: 1 } },
+    build: (args) => vitTinyPatch16(args["numClasses"] ?? 1),
   },
   // 네 판이 같은 표에서 나온다 — 갈리는 것은 width·depth 두 수뿐이다.
   "timm/efficientnet_b0": {

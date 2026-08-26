@@ -29,5 +29,6 @@ export {
 } from "./efficientnet.js";
 export { MobileNetV2 } from "./mobilenet.js";
 export { MobileNetV3, mobilenetv3Large, mobilenetv3Small } from "./mobilenetv3.js";
+export { VisionTransformer, vitTinyPatch16 } from "./vit.js";
 export { BasicBlock, ResNet18Cifar } from "./resnet.js";
 export { BimmError } from "./errors.js";
