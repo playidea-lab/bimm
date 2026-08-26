@@ -33,7 +33,9 @@ import { nn } from "borch-ts";
 
 import { BimmError } from "./errors.js";
 import { checkArgs, type FactoryArgs } from "./args.js";
-import { efficientnetB0 } from "./efficientnet.js";
+import {
+  efficientnetB0, efficientnetB1, efficientnetB2, efficientnetB3,
+} from "./efficientnet.js";
 import { MobileNetV2 } from "./mobilenet.js";
 import { mobilenetv3Large, mobilenetv3Small } from "./mobilenetv3.js";
 import { ResNet18Cifar } from "./resnet.js";
@@ -68,16 +70,22 @@ const FACTORIES: Readonly<Record<string, Factory>> = {
     spec: { numClasses: { kind: "int", min: 1 } },
     build: (args) => mobilenetv3Small(args["numClasses"] ?? 1),
   },
-  // **b1~b3 은 표에 있지만 여기 없다.** 코드는 `efficientnet.ts` 에 있고 채널·반복이
-  // timm 과 일치하는 것도 확인했지만, **parity 를 통과시키지 못했다** — 그날 이 기계의
-  // WebGPU 디바이스가 계속 죽어서 어떤 모델도 끝까지 못 갔다(b0 조차, 전에 통과하던
-  // 조건에서). 재는 데 실패한 것과 맞다고 확인한 것은 다르고, 카탈로그에 이름을
-  // 올리는 것은 뒤쪽뿐이다.
-  //
-  // 디바이스가 협조하는 날 `efficientnetB1`~`B3` 을 여기 세 줄로 되살리면 된다.
+  // 네 판이 같은 표에서 나온다 — 갈리는 것은 width·depth 두 수뿐이다.
   "timm/efficientnet_b0": {
     spec: { numClasses: { kind: "int", min: 1 } },
     build: (args) => efficientnetB0(args["numClasses"] ?? 1),
+  },
+  "timm/efficientnet_b1": {
+    spec: { numClasses: { kind: "int", min: 1 } },
+    build: (args) => efficientnetB1(args["numClasses"] ?? 1),
+  },
+  "timm/efficientnet_b2": {
+    spec: { numClasses: { kind: "int", min: 1 } },
+    build: (args) => efficientnetB2(args["numClasses"] ?? 1),
+  },
+  "timm/efficientnet_b3": {
+    spec: { numClasses: { kind: "int", min: 1 } },
+    build: (args) => efficientnetB3(args["numClasses"] ?? 1),
   },
 };
 

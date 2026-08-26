@@ -135,6 +135,18 @@ def _serve() -> tuple[socketserver.TCPServer, int]:
     return httpd, httpd.server_address[1]
 
 
+def _reap() -> None:
+    """이 기계에 남은 playwright 브라우저를 거둔다.
+
+    닫기가 매달려도, 예외로 빠져나가도, 여기서 한 번은 정리된다. 남겨두면 다음
+    측정이 그것과 GPU 를 나눠 쓰게 되고, 그 측정은 이유 없이 느려지거나 죽는다.
+    """
+    import subprocess
+
+    subprocess.run(["pkill", "-f", "ms-playwright/chromium"],
+                   capture_output=True, check=False)
+
+
 def _compare(result: dict, meta: dict[str, str]) -> int:
     import numpy as np
 
@@ -172,24 +184,25 @@ def _compare(result: dict, meta: dict[str, str]) -> int:
     else:
         print(f"열쇠 {len(wanted)}개 — 이름이 timm 과 같다")
 
-    got = np.asarray(result["got"], dtype=np.float64)
-    want = np.asarray(result["want"], dtype=np.float64)
-    if got.shape != want.shape:
-        print(f"모양이 다르다 — {got.shape} 대 {want.shape}", file=sys.stderr)
-        return 1
-
-    gap = np.abs(got - want)
+    # 페이지가 견준 것을 받아 **판정은 여기서** 한다 — 허용치를 아는 쪽은 이쪽이다.
     atol = ATOL_CARGO if result.get("mode") == "cargo" else ATOL_MATERIAL
-    tol = atol + atol * np.abs(want)
-    worst = int(np.argmax(gap - tol))
-    if np.any(gap > tol):
-        print(f"수가 갈렸다 — [{worst}] {got[worst]:.9g} ≠ {want[worst]:.9g} "
-              f"(최대 차 {gap.max():.3e}, 허용 {atol})", file=sys.stderr)
+    worst = float(result["worst"])
+    tol = atol + atol * abs(float(result["worstWant"]))
+    if worst > tol:
+        print(f"수가 갈렸다 — [{result['worstAt']}] {result['worstGot']:.9g} ≠ "
+              f"{result['worstWant']:.9g} (최대 차 {worst:.3e}, 허용 {atol})",
+              file=sys.stderr)
+        for bad in result.get("offenders", [])[:5]:
+            print(f"    [{bad['at']}] {bad['got']:.9g} ≠ {bad['want']:.9g}",
+                  file=sys.stderr)
         return 1
 
-    print(f"수 {got.size}개 — 최대 절대차 {gap.max():.3e} (허용 {atol})")
-    print(f"가장 큰 값의 자리도 같다 — {int(np.argmax(got))} 대 {int(np.argmax(want))}")
-    return 0 if int(np.argmax(got)) == int(np.argmax(want)) else 1
+    print(f"수 {result['count']}개 — 최대 절대차 {worst:.3e} (허용 {atol}) "
+          f"· 평균 {float(result['meanGap']):.3e}")
+    same = result["argmaxGot"] == result["argmaxWant"]
+    print(f"가장 큰 값의 자리{'도 같다' if same else '가 다르다'} — "
+          f"{result['argmaxGot']} 대 {result['argmaxWant']}")
+    return 0 if same else 1
 
 
 def main(argv: list[str]) -> int:
@@ -250,7 +263,18 @@ def main(argv: list[str]) -> int:
                     # None 이 된다. 그것을 그대로 json.loads 에 넣으면 진단하려던
                     # 실행이 **진단 코드 때문에** 죽는다(실측).
                     result[key] = None if raw is None else json.loads(raw)
-        return _compare(result, meta)
+
+                # **판정을 여기서 끝낸다.** 브라우저를 닫는 데서 매달리는 것을
+                # 실측했다 — `with` 를 빠져나가야 판정이 돌게 두면, 결과를 다 받아
+                # 놓고도 아무 말 없이 멈춘다. 닫기는 그 뒤에 하든 말든 이미 늦었다.
+                verdict = _compare(result, meta)
+
+        # **닫히기를 기다리지 않는다.** 판정은 위에서 이미 났고, `browser.close()` 가
+        # 매달리는 것을 실측했다(결과를 다 받아 놓고 timeout 으로 죽는다). 남은
+        # 브라우저는 조용히 새지 않는다 — GPU 를 물고 있어서 **다음 측정을 망친다.**
+        # 코어의 launch.py 가 값을 치르고 적어둔 자리이고, 이 하네스가 그대로 밟았다.
+        _reap()
+        return verdict
     finally:
         httpd.shutdown()
 
