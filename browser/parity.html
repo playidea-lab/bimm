@@ -23,8 +23,38 @@
 }
 </script>
 <script type="module">
-  import { Device, currentDevice, decode, init } from "borch-ts";
+  import { Device, decode, device, init } from "borch-ts";
   import { createModel } from "bimm-ts";
+
+  /**
+   * 두 벌을 견주어 **판정에 필요한 것만** 남긴다.
+   *
+   * 최대 어긋남과 그 자리, 양쪽의 argmax, 그리고 가장 어긋난 자리 몇 개. 파이썬이
+   * 허용치를 적용할 수 있는 재료이면서, CDP 로 나르기에 작다.
+   */
+  const compare = (got, want) => {
+    let worst = 0, worstAt = 0, sum = 0;
+    let maxGot = 0, maxWant = 0;
+    for (let i = 0; i < got.length; i++) {
+      const gap = Math.abs(got[i] - want[i]);
+      sum += gap;
+      if (gap > worst) { worst = gap; worstAt = i; }
+      if (got[i] > got[maxGot]) maxGot = i;
+      if (want[i] > want[maxWant]) maxWant = i;
+    }
+    // 가장 어긋난 다섯 자리 — 실패했을 때 어디가 문제인지 보려면 한 자리로는 모자란다.
+    const order = got.map((_, i) => i)
+      .sort((a, b) => Math.abs(got[b] - want[b]) - Math.abs(got[a] - want[a]))
+      .slice(0, 5);
+    return {
+      count: got.length,
+      worst, worstAt,
+      worstGot: got[worstAt], worstWant: want[worstAt],
+      meanGap: sum / got.length,
+      argmaxGot: maxGot, argmaxWant: maxWant,
+      offenders: order.map((i) => ({ at: i, got: got[i], want: want[i] })),
+    };
+  };
 
   const out = document.getElementById("out");
   try {
@@ -86,10 +116,14 @@
     // **디바이스를 잃었는지 묻는다.** 잃으면 그 뒤의 수는 전부 뜻이 없는데 예외가
     // 안 난다 — 코어가 그래서 이것을 물어볼 수 있는 상태로 두었고(`device.ts`),
     // 그 자리를 안 쓰면 여기서는 "매달렸다" 로만 보인다(실측: efficientnet_b1).
-    const device = currentDevice();
-    if (!device.alive) {
+    // **`device()` 다, `currentDevice()` 가 아니다.** 뒤엣것은 종류를 나타내는 문자열
+    // ("webgpu")을 돌려주므로 `.alive` 가 언제나 undefined 이고, 그것을 `!` 로 뒤집으면
+    // **언제나 참이다** — 즉 "디바이스를 잃었다" 가 늘 걸린다. 그 한 글자 차이를 GPU
+    // 고장으로 읽고 브라우저를 끄고 재부팅까지 검토했다. 이름이 비슷하면 그렇게 된다.
+    const dev = device();
+    if (!dev.alive) {
       window.__parity = {
-        error: `디바이스를 잃었다: ${JSON.stringify(device.lost)}`,
+        error: `디바이스를 잃었다: ${JSON.stringify(dev.lost)}`,
         adapter: Device.adapterInfo,
       };
       out.textContent = "디바이스를 잃었다";
@@ -106,13 +140,16 @@
       wanted: Object.keys(model.stateDict()).sort(),
       given: Object.keys(given).sort(),
       shape: got.shape,
-      got: Array.from(await got.toArray()),
-      want: Array.from(await want.toArray()),
+      // **배열을 통째로 넘기지 않는다.** 1000 개짜리 두 벌을 CDP 로 나르다 마지막
+      // 하나에서 매달리는 것을 실측했다(efficientnet_b1, 여러 번). 비교는 여기서
+      // 하고 판정에 필요한 것만 넘긴다 — 허용치를 적용해 통과/실패를 정하는 것은
+      // 여전히 파이썬이다.
+      ...compare(Array.from(await got.toArray()), Array.from(await want.toArray())),
     };
     out.textContent = `났다 — ${got.shape.join("×")}`;
   } catch (err) {
     let lost = null;
-    try { const d = currentDevice(); lost = d.alive ? null : d.lost; } catch { /* 코어가 서기도 전이면 물을 것이 없다 */ }
+    try { const d = device(); lost = d.alive ? null : d.lost; } catch { /* 코어가 서기도 전이면 물을 것이 없다 */ }
     window.__parity = {
       error: String((err && err.stack) || err),
       ...(lost === null ? {} : { deviceLost: lost }),

@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><title>최소 WebGPU</title></head><body>
+<pre id="o">…</pre>
+<script type="importmap">
+{"imports":{"borch-ts":"/node_modules/borch-ts/borch-ts/dist/src/index.js"}}
+</script>
+<script type="module">
+  import { Device, currentDevice, init, Tensor } from "borch-ts";
+  const o = document.getElementById("o");
+  const steps = [];
+  try {
+    await init();
+    steps.push(`init OK · ${Device.adapterInfo}`);
+    const a = Tensor.from([1, 2, 3, 4], [2, 2]);
+    steps.push(`텐서 생성 OK`);
+    const b = a.add(a);
+    steps.push(`덧셈 OK`);
+    const v = Array.from(await b.toArray());
+    steps.push(`읽기 OK · ${JSON.stringify(v)}`);
+    const d = currentDevice();
+    steps.push(`디바이스 살아있나: ${d.alive}`);
+    window.__min = { ok: true, steps };
+  } catch (e) {
+    let alive = null;
+    try { alive = currentDevice().alive; } catch {}
+    window.__min = { ok: false, steps, error: String(e), alive };
+  }
+  o.textContent = JSON.stringify(window.__min, null, 1);
+</script>
+</body></html>
