@@ -11,11 +11,11 @@
  * 층을 찾으므로 이 둘은 `ownParameters()` 로 직접 등록해야 하고, **그 이름이 그대로
  * `stateDict` 열쇠가 된다** — timm 의 이름을 쓰지 않으면 체크포인트가 안 실린다.
  *
- * ## 2. 이어붙이기를 더하기로 한다
+ * ## 2. cls 토큰은 `Tensor.cat` 으로 붙인다
  *
- * `cls_token` 을 패치 토큰 앞에 붙여야 하는데 코어에 `cat` 이 없다. 대신 양쪽을 같은
- * 길이로 **0 으로 늘려 놓고 더한다** — 겹치는 자리가 없으므로 이어붙인 것과 같은
- * 값이 나온다. 결과가 같다는 것은 parity 가 판정한다.
+ * 처음엔 코어에 `cat` 이 없는 줄 알고 양쪽을 0 으로 늘려 더했다. 있었다 —
+ * **인스턴스 메서드가 아니라 static 이라** 메서드만 훑은 검색에 안 걸렸을 뿐이다.
+ * torch 도 `torch.cat` 이 자유 함수이므로 부르는 모양까지 같다(borch#87).
  *
  * ## 3. q·k·v 가 한 층에 들어 있다
  *
@@ -222,11 +222,10 @@ export class VisionTransformer extends nn.Module {
     const tokens = this.patch_embed.forward(x);               // [B, N, D]
     const [batch = 1] = tokens.shape;
 
-    // **이어붙이기를 더하기로 한다** — 코어에 `cat` 이 없다. 겹치지 않는 자리에
-    // 0 으로 늘려 놓고 더하면 이어붙인 것과 같다.
-    const cls = this.cls_token.expand(batch, 1, DIM).pad(1, 0, this.patches);
-    const rest = tokens.pad(1, 1, 0);
-    let h = cls.add(rest).add(this.pos_embed);
+    // cls 토큰을 앞에 붙인다. torch 의 `torch.cat([cls, x], dim=1)` 과 같은
+    // 자리에 같은 이름으로 있다 — **메서드가 아니라 static 이라 못 찾았었다.**
+    const cls = this.cls_token.expand(batch, 1, DIM);
+    let h = Tensor.cat([cls, tokens], 1).add(this.pos_embed);
 
     h = this.blocks.forward(h);
     h = this.norm.forward(h);
