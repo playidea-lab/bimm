@@ -33,6 +33,7 @@ import { nn } from "borch-ts";
 
 import { BimmError } from "./errors.js";
 import { checkArgs, type FactoryArgs } from "./args.js";
+import { EfficientNetB0 } from "./efficientnet.js";
 import { MobileNetV2 } from "./mobilenet.js";
 import { mobilenetv3Large, mobilenetv3Small } from "./mobilenetv3.js";
 import { ResNet18Cifar } from "./resnet.js";
@@ -66,6 +67,10 @@ const FACTORIES: Readonly<Record<string, Factory>> = {
   "timm/mobilenetv3_small_100": {
     spec: { numClasses: { kind: "int", min: 1 } },
     build: (args) => mobilenetv3Small(args["numClasses"] ?? 1),
+  },
+  "timm/efficientnet_b0": {
+    spec: { numClasses: { kind: "int", min: 1 } },
+    build: (args) => new EfficientNetB0(args["numClasses"] ?? 1),
   },
 };
 

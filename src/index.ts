@@ -24,6 +24,7 @@
 
 export { createModel, factorySpec, listModels, type FactoryName } from "./registry.js";
 export { checkArgs, type ArgSpec, type FactoryArgs } from "./args.js";
+export { EfficientNetB0 } from "./efficientnet.js";
 export { MobileNetV2 } from "./mobilenet.js";
 export { MobileNetV3, mobilenetv3Large, mobilenetv3Small } from "./mobilenetv3.js";
 export { BasicBlock, ResNet18Cifar } from "./resnet.js";
