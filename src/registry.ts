@@ -34,6 +34,7 @@ import { nn } from "borch-ts";
 import { BimmError } from "./errors.js";
 import { checkArgs, type FactoryArgs } from "./args.js";
 import { MobileNetV2 } from "./mobilenet.js";
+import { mobilenetv3Large, mobilenetv3Small } from "./mobilenetv3.js";
 import { ResNet18Cifar } from "./resnet.js";
 
 interface Factory {
@@ -56,6 +57,15 @@ const FACTORIES: Readonly<Record<string, Factory>> = {
   "timm/mobilenetv2_100": {
     spec: { numClasses: { kind: "int", min: 1 } },
     build: (args) => new MobileNetV2(args["numClasses"] ?? 1),
+  },
+  // 두 판이 같은 빌더에서 나온다 — 갈리는 것은 블록 표와 머리 채널뿐이다.
+  "timm/mobilenetv3_large_100": {
+    spec: { numClasses: { kind: "int", min: 1 } },
+    build: (args) => mobilenetv3Large(args["numClasses"] ?? 1),
+  },
+  "timm/mobilenetv3_small_100": {
+    spec: { numClasses: { kind: "int", min: 1 } },
+    build: (args) => mobilenetv3Small(args["numClasses"] ?? 1),
   },
 };
 
