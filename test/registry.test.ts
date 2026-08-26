@@ -24,6 +24,9 @@ const FACTORY = "resnet18_cifar";
 test("카탈로그가 실린 이름을 든다", () => {
   assert.deepEqual(listModels(), [
     { library: LIBRARY, factory: FACTORY },
+    // 표는 이름순으로 나온다 — 아래 "정해진 순서로 나온다" 가 지키는 규칙이고,
+    // 표에 적은 차례가 아니라 이름이 순서를 정한다.
+    { library: "timm", factory: "efficientnet_b0" },
     { library: "timm", factory: "mobilenetv2_100" },
     { library: "timm", factory: "mobilenetv3_large_100" },
     { library: "timm", factory: "mobilenetv3_small_100" },
