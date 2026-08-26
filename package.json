@@ -3,6 +3,7 @@
   "version": "0.5.0",
   "description": "borch 런타임 위의 모델 아키텍처 카탈로그 — timm 의 자리",
   "license": "Apache-2.0",
+  "author": "PLAYIDEALAB Inc.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/playidea-lab/bimm.git"
