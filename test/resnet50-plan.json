@@ -1,0 +1,149 @@
+{
+  "resnet50": {
+    "stem": 64,
+    "layers": [
+      [
+        {
+          "cin": 64,
+          "width": 64,
+          "cout": 256,
+          "stride": 1,
+          "downsample": {
+            "cin": 64,
+            "cout": 256,
+            "kernel": 1,
+            "stride": 1
+          }
+        },
+        {
+          "cin": 256,
+          "width": 64,
+          "cout": 256,
+          "stride": 1,
+          "downsample": null
+        },
+        {
+          "cin": 256,
+          "width": 64,
+          "cout": 256,
+          "stride": 1,
+          "downsample": null
+        }
+      ],
+      [
+        {
+          "cin": 256,
+          "width": 128,
+          "cout": 512,
+          "stride": 2,
+          "downsample": {
+            "cin": 256,
+            "cout": 512,
+            "kernel": 1,
+            "stride": 2
+          }
+        },
+        {
+          "cin": 512,
+          "width": 128,
+          "cout": 512,
+          "stride": 1,
+          "downsample": null
+        },
+        {
+          "cin": 512,
+          "width": 128,
+          "cout": 512,
+          "stride": 1,
+          "downsample": null
+        },
+        {
+          "cin": 512,
+          "width": 128,
+          "cout": 512,
+          "stride": 1,
+          "downsample": null
+        }
+      ],
+      [
+        {
+          "cin": 512,
+          "width": 256,
+          "cout": 1024,
+          "stride": 2,
+          "downsample": {
+            "cin": 512,
+            "cout": 1024,
+            "kernel": 1,
+            "stride": 2
+          }
+        },
+        {
+          "cin": 1024,
+          "width": 256,
+          "cout": 1024,
+          "stride": 1,
+          "downsample": null
+        },
+        {
+          "cin": 1024,
+          "width": 256,
+          "cout": 1024,
+          "stride": 1,
+          "downsample": null
+        },
+        {
+          "cin": 1024,
+          "width": 256,
+          "cout": 1024,
+          "stride": 1,
+          "downsample": null
+        },
+        {
+          "cin": 1024,
+          "width": 256,
+          "cout": 1024,
+          "stride": 1,
+          "downsample": null
+        },
+        {
+          "cin": 1024,
+          "width": 256,
+          "cout": 1024,
+          "stride": 1,
+          "downsample": null
+        }
+      ],
+      [
+        {
+          "cin": 1024,
+          "width": 512,
+          "cout": 2048,
+          "stride": 2,
+          "downsample": {
+            "cin": 1024,
+            "cout": 2048,
+            "kernel": 1,
+            "stride": 2
+          }
+        },
+        {
+          "cin": 2048,
+          "width": 512,
+          "cout": 2048,
+          "stride": 1,
+          "downsample": null
+        },
+        {
+          "cin": 2048,
+          "width": 512,
+          "cout": 2048,
+          "stride": 1,
+          "downsample": null
+        }
+      ]
+    ],
+    "fcIn": 2048,
+    "keys": 320
+  }
+}

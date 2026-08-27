@@ -40,6 +40,7 @@ import { MobileNetV2 } from "./mobilenet.js";
 import { mobilenetv3Large, mobilenetv3Small } from "./mobilenetv3.js";
 import { vitTinyPatch16 } from "./vit.js";
 import { ResNet18Cifar } from "./resnet.js";
+import { resnet50 } from "./resnet50.js";
 
 /**
  * `numClasses` 의 위쪽 끝.
@@ -86,6 +87,13 @@ const FACTORIES: Readonly<Record<string, Factory>> = {
   "timm/vit_tiny_patch16_224": {
     spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => vitTinyPatch16(args["numClasses"] ?? 1),
+  },
+  // **이 카탈로그의 첫 ImageNet ResNet.** 위의 `borchvision/resnet18_cifar` 와
+  // 이름이 비슷하지만 다른 물건이다 — 스템부터 다르고 가중치가 안 호환된다.
+  // 이름공간을 둘로 받은 설계가 여기서 처음으로 값을 한다.
+  "timm/resnet50": {
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
+    build: (args) => resnet50(args["numClasses"] ?? 1),
   },
   // 네 판이 같은 표에서 나온다 — 갈리는 것은 width·depth 두 수뿐이다.
   "timm/efficientnet_b0": {
