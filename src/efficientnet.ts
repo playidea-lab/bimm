@@ -69,6 +69,85 @@ const B0: readonly Stage[] = [
   { kernel: 3, expansion: 6, cout: 320, repeats: 1, stride: 1 },
 ];
 
+/** 한 블록이 쓰게 되는 수들. 텐서를 만들기 전에 이미 정해져 있다. */
+export interface BlockPlan {
+  /** 첫 단계만 확장 없이 depthwise 로 받는다. */
+  readonly kind: "dw" | "ir";
+  readonly cin: number;
+  readonly cout: number;
+  readonly kernel: number;
+  readonly stride: number;
+  /** 넓힌 채널. `dw` 는 넓히지 않으므로 `cin` 과 같다. */
+  readonly mid: number;
+  /** SE 가 좁히는 폭. **블록 입력에서 나온다** — 넓힌 채널이 아니다. */
+  readonly se: number;
+}
+
+/**
+ * 모델 하나가 쓰는 수 전부.
+ *
+ * **단계별로 묶여 있다.** 평평하게 두면 안 되는 이유는 열쇠 이름이다 — timm 은
+ * `blocks.2.1.conv_pw` 처럼 단계와 그 안의 자리로 부르고, 우리도 `Sequential` 을
+ * 단계마다 두어 같은 이름이 나온다. 묶음이 풀리면 이름이 갈리고, 이름이 갈리면
+ * 가중치가 안 실린다.
+ */
+export interface Plan {
+  readonly stem: number;
+  readonly stages: readonly (readonly BlockPlan[])[];
+  readonly head: number;
+}
+
+/**
+ * 배율 둘에서 **층을 만들기 전에** 수를 전부 뽑는다.
+ *
+ * ## 왜 갈라 두는가
+ *
+ * 층을 하나라도 만들려면 WebGPU 어댑터가 필요하고, 그건 브라우저에서만 잡힌다.
+ * 그래서 이 계열의 산수 — 배율을 먹인 채널, 올림한 반복수, SE 가 좁히는 폭 — 는
+ * **GPU 가 있는 자리에서만 확인할 수 있었다.** 실제로는 브라우저를 띄우는 parity
+ * 하네스가 유일한 검사였고, 그것은 CI 에서 안 돈다.
+ *
+ * 수를 먼저 뽑아 두면 그 산수는 어디서나 검사된다. `channels.ts` 와 같은 이유이고,
+ * 여기는 그것을 모델 한 채 전체로 넓힌 것이다.
+ */
+export function efficientnetPlan(width: number, depth: number): Plan {
+  const stages: BlockPlan[][] = [];
+  let cin = roundChannels(STEM_CHANNELS, width);
+  const stem = cin;
+  for (const [index, stage] of B0.entries()) {
+    const blocks: BlockPlan[] = [];
+    const cout = roundChannels(stage.cout, width);
+    // 반복은 올림이다 — timm 이 `ceil(n * depth)` 로 센다.
+    const repeats = Math.ceil(stage.repeats * depth);
+    for (let i = 0; i < repeats; i += 1) {
+      const kind = index === 0 ? "dw" : "ir";
+      blocks.push({
+        kind,
+        cin,
+        cout,
+        kernel: stage.kernel,
+        stride: i === 0 ? stage.stride : 1,
+        mid: kind === "dw" ? cin : cin * stage.expansion,
+        se: seChannels(cin),
+      });
+      cin = cout;
+    }
+    stages.push(blocks);
+  }
+  return { stem, stages, head: roundChannels(HEAD_CHANNELS, width) };
+}
+
+/**
+ * SE 가 좁히는 폭 — **블록 입력의 0.25.**
+ *
+ * MobileNetV3 와 갈리는 자리다. 저쪽은 넓힌 채널에서 시작해 `make_divisible` 을
+ * 통과하는데, 여기는 **블록 입력**에서 시작해 그냥 반올림한다. b0 부터 b3 까지
+ * 블록 88 개를 timm 과 대 봐서 확인했다 — 한 곳도 안 갈린다.
+ */
+function seChannels(fromInput: number): number {
+  return Math.round(fromInput * 0.25);
+}
+
 /**
  * 채널마다 하나의 수를 뽑아 채널을 저울질한다.
  *
@@ -172,33 +251,24 @@ export class EfficientNet extends nn.Module {
 
   constructor(numClasses: number, width = 1, depth = 1) {
     super();
-    const stem = roundChannels(STEM_CHANNELS, width);
-    this.conv_stem = new nn.Conv2d(3, stem, 3, 2, 1, 1, 1, false);
-    this.bn1 = new nn.BatchNormND(stem);
+    // **수는 이미 정해져 있다.** 여기서는 그것을 층으로 세우기만 한다 — 산수는
+    // `efficientnetPlan` 이 하고, 그쪽은 GPU 없이 검사된다.
+    const plan = efficientnetPlan(width, depth);
+    this.conv_stem = new nn.Conv2d(3, plan.stem, 3, 2, 1, 1, 1, false);
+    this.bn1 = new nn.BatchNormND(plan.stem);
 
-    const stages: nn.Module[] = [];
-    let cin = stem;
-    for (const [index, stage] of B0.entries()) {
-      const built: nn.Module[] = [];
-      const cout = roundChannels(stage.cout, width);
-      // 반복은 올림이다 — timm 이 `ceil(n * depth)` 로 센다.
-      const repeats = Math.ceil(stage.repeats * depth);
-      for (let i = 0; i < repeats; i += 1) {
-        const stride = i === 0 ? stage.stride : 1;
-        built.push(index === 0
-          ? new DepthwiseSeparableConv(cin, cout, stage.kernel, stride)
-          : new InvertedResidual(cin, cout, stage.kernel, stride, stage.expansion));
-        cin = cout;
-      }
-      stages.push(new nn.Sequential(built));
-    }
-    this.blocks = new nn.Sequential(stages);
+    this.blocks = new nn.Sequential(plan.stages.map((blocks) => new nn.Sequential(
+      blocks.map((b) => (b.kind === "dw"
+        ? new DepthwiseSeparableConv(b.cin, b.cout, b.kernel, b.stride)
+        : new InvertedResidual(b.cin, b.cout, b.kernel, b.stride, b.mid / b.cin))),
+    )));
 
-    const head = roundChannels(HEAD_CHANNELS, width);
-    this.conv_head = new nn.Conv2d(cin, head, 1, 1, 0, 1, 1, false);
-    this.bn2 = new nn.BatchNormND(head);
-    this.classifier = new nn.Linear(head, numClasses);
-    this.headChannels = head;
+    const last = plan.stages[plan.stages.length - 1];
+    const cin = last?.[last.length - 1]?.cout ?? plan.stem;
+    this.conv_head = new nn.Conv2d(cin, plan.head, 1, 1, 0, 1, 1, false);
+    this.bn2 = new nn.BatchNormND(plan.head);
+    this.classifier = new nn.Linear(plan.head, numClasses);
+    this.headChannels = plan.head;
   }
 
   override forward(x: Tensor): Tensor {

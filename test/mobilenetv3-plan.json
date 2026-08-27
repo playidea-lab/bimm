@@ -1,0 +1,300 @@
+{
+  "mobilenetv3_large_100": {
+    "which": "large",
+    "stem": 16,
+    "stages": [
+      [
+        {
+          "kind": "dw",
+          "cin": 16,
+          "mid": 16,
+          "cout": 16,
+          "kernel": 3,
+          "stride": 1,
+          "se": 0,
+          "act": "relu"
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 16,
+          "mid": 64,
+          "cout": 24,
+          "kernel": 3,
+          "stride": 2,
+          "se": 0,
+          "act": "relu"
+        },
+        {
+          "kind": "ir",
+          "cin": 24,
+          "mid": 72,
+          "cout": 24,
+          "kernel": 3,
+          "stride": 1,
+          "se": 0,
+          "act": "relu"
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 24,
+          "mid": 72,
+          "cout": 40,
+          "kernel": 5,
+          "stride": 2,
+          "se": 24,
+          "act": "relu"
+        },
+        {
+          "kind": "ir",
+          "cin": 40,
+          "mid": 120,
+          "cout": 40,
+          "kernel": 5,
+          "stride": 1,
+          "se": 32,
+          "act": "relu"
+        },
+        {
+          "kind": "ir",
+          "cin": 40,
+          "mid": 120,
+          "cout": 40,
+          "kernel": 5,
+          "stride": 1,
+          "se": 32,
+          "act": "relu"
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 40,
+          "mid": 240,
+          "cout": 80,
+          "kernel": 3,
+          "stride": 2,
+          "se": 0,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 80,
+          "mid": 200,
+          "cout": 80,
+          "kernel": 3,
+          "stride": 1,
+          "se": 0,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 80,
+          "mid": 184,
+          "cout": 80,
+          "kernel": 3,
+          "stride": 1,
+          "se": 0,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 80,
+          "mid": 184,
+          "cout": 80,
+          "kernel": 3,
+          "stride": 1,
+          "se": 0,
+          "act": "hardswish"
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 80,
+          "mid": 480,
+          "cout": 112,
+          "kernel": 3,
+          "stride": 1,
+          "se": 120,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 112,
+          "mid": 672,
+          "cout": 112,
+          "kernel": 3,
+          "stride": 1,
+          "se": 168,
+          "act": "hardswish"
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 112,
+          "mid": 672,
+          "cout": 160,
+          "kernel": 5,
+          "stride": 2,
+          "se": 168,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 160,
+          "mid": 960,
+          "cout": 160,
+          "kernel": 5,
+          "stride": 1,
+          "se": 240,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 160,
+          "mid": 960,
+          "cout": 160,
+          "kernel": 5,
+          "stride": 1,
+          "se": 240,
+          "act": "hardswish"
+        }
+      ]
+    ],
+    "wide": 960,
+    "head": 1280
+  },
+  "mobilenetv3_small_100": {
+    "which": "small",
+    "stem": 16,
+    "stages": [
+      [
+        {
+          "kind": "dw",
+          "cin": 16,
+          "mid": 16,
+          "cout": 16,
+          "kernel": 3,
+          "stride": 2,
+          "se": 8,
+          "act": "relu"
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 16,
+          "mid": 72,
+          "cout": 24,
+          "kernel": 3,
+          "stride": 2,
+          "se": 0,
+          "act": "relu"
+        },
+        {
+          "kind": "ir",
+          "cin": 24,
+          "mid": 88,
+          "cout": 24,
+          "kernel": 3,
+          "stride": 1,
+          "se": 0,
+          "act": "relu"
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 24,
+          "mid": 96,
+          "cout": 40,
+          "kernel": 5,
+          "stride": 2,
+          "se": 24,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 40,
+          "mid": 240,
+          "cout": 40,
+          "kernel": 5,
+          "stride": 1,
+          "se": 64,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 40,
+          "mid": 240,
+          "cout": 40,
+          "kernel": 5,
+          "stride": 1,
+          "se": 64,
+          "act": "hardswish"
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 40,
+          "mid": 120,
+          "cout": 48,
+          "kernel": 5,
+          "stride": 1,
+          "se": 32,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 48,
+          "mid": 144,
+          "cout": 48,
+          "kernel": 5,
+          "stride": 1,
+          "se": 40,
+          "act": "hardswish"
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 48,
+          "mid": 288,
+          "cout": 96,
+          "kernel": 5,
+          "stride": 2,
+          "se": 72,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 96,
+          "mid": 576,
+          "cout": 96,
+          "kernel": 5,
+          "stride": 1,
+          "se": 144,
+          "act": "hardswish"
+        },
+        {
+          "kind": "ir",
+          "cin": 96,
+          "mid": 576,
+          "cout": 96,
+          "kernel": 5,
+          "stride": 1,
+          "se": 144,
+          "act": "hardswish"
+        }
+      ]
+    ],
+    "wide": 576,
+    "head": 1024
+  }
+}

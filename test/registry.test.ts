@@ -56,9 +56,13 @@ test("카탈로그는 정해진 순서로 나온다", () => {
 test("인자 규격을 물어볼 수 있다", () => {
   // 매니페스트를 쓰는 쪽이 무엇을 적어야 하는지 알아야 한다 — 그래서 표가 밖으로
   // 열린다.
-  assert.deepEqual(factorySpec(LIBRARY, FACTORY), {
-    numClasses: { kind: "int", min: 1 },
-  });
+  const spec = factorySpec(LIBRARY, FACTORY);
+  // 위쪽 끝의 **값**은 여기서 안 박는다 — 그것은 올라갈 수 있는 수이고, 올릴 때마다
+  // 이 검사가 빨개지면 검사가 아니라 걸림돌이다. 물어볼 수 있다는 것과, 아래가 위보다
+  // 작다는 것만 본다.
+  assert.equal(spec["numClasses"]?.kind, "int");
+  assert.equal(spec["numClasses"]?.min, 1);
+  assert.ok((spec["numClasses"]?.max ?? 0) > 1, "위쪽 끝이 아래쪽보다 커야 한다");
 });
 
 test("모르는 팩토리는 거절하고 무엇이 있는지 같이 말한다", () => {

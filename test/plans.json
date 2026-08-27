@@ -1,0 +1,153 @@
+{
+  "mobilenetv2_100": {
+    "stem": 32,
+    "stages": [
+      [
+        {
+          "kind": "dw",
+          "cin": 32,
+          "mid": 32,
+          "cout": 16,
+          "stride": 1
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 16,
+          "mid": 96,
+          "cout": 24,
+          "stride": 2
+        },
+        {
+          "kind": "ir",
+          "cin": 24,
+          "mid": 144,
+          "cout": 24,
+          "stride": 1
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 24,
+          "mid": 144,
+          "cout": 32,
+          "stride": 2
+        },
+        {
+          "kind": "ir",
+          "cin": 32,
+          "mid": 192,
+          "cout": 32,
+          "stride": 1
+        },
+        {
+          "kind": "ir",
+          "cin": 32,
+          "mid": 192,
+          "cout": 32,
+          "stride": 1
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 32,
+          "mid": 192,
+          "cout": 64,
+          "stride": 2
+        },
+        {
+          "kind": "ir",
+          "cin": 64,
+          "mid": 384,
+          "cout": 64,
+          "stride": 1
+        },
+        {
+          "kind": "ir",
+          "cin": 64,
+          "mid": 384,
+          "cout": 64,
+          "stride": 1
+        },
+        {
+          "kind": "ir",
+          "cin": 64,
+          "mid": 384,
+          "cout": 64,
+          "stride": 1
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 64,
+          "mid": 384,
+          "cout": 96,
+          "stride": 1
+        },
+        {
+          "kind": "ir",
+          "cin": 96,
+          "mid": 576,
+          "cout": 96,
+          "stride": 1
+        },
+        {
+          "kind": "ir",
+          "cin": 96,
+          "mid": 576,
+          "cout": 96,
+          "stride": 1
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 96,
+          "mid": 576,
+          "cout": 160,
+          "stride": 2
+        },
+        {
+          "kind": "ir",
+          "cin": 160,
+          "mid": 960,
+          "cout": 160,
+          "stride": 1
+        },
+        {
+          "kind": "ir",
+          "cin": 160,
+          "mid": 960,
+          "cout": 160,
+          "stride": 1
+        }
+      ],
+      [
+        {
+          "kind": "ir",
+          "cin": 160,
+          "mid": 960,
+          "cout": 320,
+          "stride": 1
+        }
+      ]
+    ],
+    "head": 1280
+  },
+  "vit_tiny_patch16_224": {
+    "dim": 192,
+    "depth": 12,
+    "heads": 3,
+    "headDim": 64,
+    "patch": 16,
+    "patches": 196,
+    "posLen": 197,
+    "qkvOut": 576,
+    "mlpHidden": 768,
+    "normEps": 1e-06
+  }
+}

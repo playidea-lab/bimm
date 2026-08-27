@@ -219,6 +219,67 @@ const SMALL: Recipe = {
   head: 1024,
 };
 
+/** 한 블록이 쓰게 되는 수들 — 표에 적힌 것과 앞 블록에서 이어받는 것. */
+export interface BlockPlan {
+  /** 첫 단계만 확장 없이 돈다 — timm 이 거기 두는 블록이 다르다. */
+  readonly kind: "dw" | "ir";
+  readonly cin: number;
+  readonly mid: number;
+  readonly cout: number;
+  readonly kernel: number;
+  readonly stride: number;
+  /** SE 가 좁히는 폭. 0 이면 그 블록에 SE 가 없다. */
+  readonly se: number;
+  readonly act: Act;
+}
+
+/** 모델 하나가 쓰는 수 전부. 단계 묶음이 유지된다 — 열쇠 이름이 거기서 나온다. */
+export interface Plan {
+  readonly stem: number;
+  readonly stages: readonly (readonly BlockPlan[])[];
+  /** `blocks` 의 마지막에 홀로 서는 1×1 이 내는 채널. */
+  readonly wide: number;
+  readonly head: number;
+}
+
+/**
+ * 표에서 **층을 만들기 전에** 수를 전부 뽑는다.
+ *
+ * EfficientNet 쪽과 같은 이유다 — 층은 GPU 를 요구하고, 수는 요구하지 않는다.
+ *
+ * ## 여기서 위험한 것은 산수가 아니라 **표 자체다**
+ *
+ * 이 계열에는 배율이 없다(`_100` 두 판이 전부다). `mid` 와 `cout` 은 계산되는 것이
+ * 아니라 표에 절대 수로 적혀 있고, 그 표는 **손으로 옮긴 것**이다. 한 칸이 틀리면
+ * 그 블록만 채널이 어긋나 체크포인트가 안 실린다.
+ *
+ * 그래서 이 계획을 뽑는 값어치는 파생값(`cin` 사슬, SE 폭)보다 **표를 통째로 밖에
+ * 꺼내 timm 과 대 볼 수 있게 하는 것**에 있다.
+ */
+export function mobilenetv3Plan(which: "large" | "small"): Plan {
+  const recipe = which === "large" ? LARGE : SMALL;
+  const stages: BlockPlan[][] = [];
+  let cin = STEM_CHANNELS;
+  for (const [index, blocks] of recipe.stages.entries()) {
+    const rows: BlockPlan[] = [];
+    for (const spec of blocks) {
+      rows.push({
+        kind: index === 0 ? "dw" : "ir",
+        cin,
+        mid: spec.mid,
+        cout: spec.cout,
+        kernel: spec.kernel,
+        stride: spec.stride,
+        se: spec.se ? makeDivisible(spec.mid * SE_RATIO) : 0,
+        act: spec.act,
+      });
+      cin = spec.cout;
+    }
+    stages.push(rows);
+  }
+  return { stem: STEM_CHANNELS, stages, wide: recipe.wide, head: recipe.head };
+}
+
 /**
  * MobileNetV3.
  *

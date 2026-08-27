@@ -41,6 +41,16 @@ import { mobilenetv3Large, mobilenetv3Small } from "./mobilenetv3.js";
 import { vitTinyPatch16 } from "./vit.js";
 import { ResNet18Cifar } from "./resnet.js";
 
+/**
+ * `numClasses` 의 위쪽 끝.
+ *
+ * 실제 상한이 아니라 **오타를 거르는 자리다.** ImageNet-21k 가 21841 이고 그보다 큰
+ * 공개 분류 과제는 흔하지 않으므로, 이 수를 넘는 값은 자리를 잘못 누른 쪽일 가능성이
+ * 훨씬 크다. 진짜로 더 필요해지는 날 이 수를 올리면 된다 — 올리는 것은 되고 내리는
+ * 것은 안 되는 방향이다.
+ */
+const MAX_CLASSES = 100_000;
+
 interface Factory {
   readonly spec: FactoryArgs;
   readonly build: (args: Readonly<Record<string, number>>) => nn.Module;
@@ -49,7 +59,7 @@ interface Factory {
 /** 열쇠는 `library/factory` 다 — 표를 찾는 데만 쓰고 밖으로는 안 내보낸다. */
 const FACTORIES: Readonly<Record<string, Factory>> = {
   "borchvision/resnet18_cifar": {
-    spec: { numClasses: { kind: "int", min: 1 } },
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     // `?? 1` 은 도달하지 않는다 — checkArgs 가 없는 인자를 이미 거절했다.
     // noUncheckedIndexedAccess 를 켠 값이 이런 자리를 눈에 보이게 하는 것이다.
     build: (args) => new ResNet18Cifar(args["numClasses"] ?? 1),
@@ -59,39 +69,39 @@ const FACTORIES: Readonly<Record<string, Factory>> = {
   // 까닭이 처음으로 눈에 보이는 자리다 — timm 의 resnet18 과 torchvision 의
   // resnet18 은 실제로 다른 모델이고 가중치가 안 호환된다.
   "timm/mobilenetv2_100": {
-    spec: { numClasses: { kind: "int", min: 1 } },
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => new MobileNetV2(args["numClasses"] ?? 1),
   },
   // 두 판이 같은 빌더에서 나온다 — 갈리는 것은 블록 표와 머리 채널뿐이다.
   "timm/mobilenetv3_large_100": {
-    spec: { numClasses: { kind: "int", min: 1 } },
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => mobilenetv3Large(args["numClasses"] ?? 1),
   },
   "timm/mobilenetv3_small_100": {
-    spec: { numClasses: { kind: "int", min: 1 } },
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => mobilenetv3Small(args["numClasses"] ?? 1),
   },
   // 합성곱이 아닌 첫 아키텍처. 표에 이름 하나가 늘어난 것으로 보이지만, 뼈대가
   // 다르므로 `vit.ts` 첫 문단을 읽고 손대는 편이 낫다.
   "timm/vit_tiny_patch16_224": {
-    spec: { numClasses: { kind: "int", min: 1 } },
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => vitTinyPatch16(args["numClasses"] ?? 1),
   },
   // 네 판이 같은 표에서 나온다 — 갈리는 것은 width·depth 두 수뿐이다.
   "timm/efficientnet_b0": {
-    spec: { numClasses: { kind: "int", min: 1 } },
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => efficientnetB0(args["numClasses"] ?? 1),
   },
   "timm/efficientnet_b1": {
-    spec: { numClasses: { kind: "int", min: 1 } },
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => efficientnetB1(args["numClasses"] ?? 1),
   },
   "timm/efficientnet_b2": {
-    spec: { numClasses: { kind: "int", min: 1 } },
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => efficientnetB2(args["numClasses"] ?? 1),
   },
   "timm/efficientnet_b3": {
-    spec: { numClasses: { kind: "int", min: 1 } },
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => efficientnetB3(args["numClasses"] ?? 1),
   },
 };

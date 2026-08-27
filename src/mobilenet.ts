@@ -115,6 +115,55 @@ class InvertedResidual extends nn.Module {
   }
 }
 
+/** 한 블록이 쓰게 되는 수들 — 표에 적힌 것과 앞 블록에서 이어받는 것. */
+export interface BlockPlan {
+  /** 첫 단계만 확장이 1 이라 확장 층이 없다 — 열쇠 이름도 그래서 다르다. */
+  readonly kind: "dw" | "ir";
+  readonly cin: number;
+  readonly cout: number;
+  readonly stride: number;
+  /** 넓힌 채널. `dw` 는 넓히지 않으므로 `cin` 과 같다. */
+  readonly mid: number;
+}
+
+/** 모델 하나가 쓰는 수 전부. 단계 묶음이 유지된다 — 열쇠 이름이 거기서 나온다. */
+export interface Plan {
+  readonly stem: number;
+  readonly stages: readonly (readonly BlockPlan[])[];
+  readonly head: number;
+}
+
+/**
+ * 표에서 **층을 만들기 전에** 수를 전부 뽑는다.
+ *
+ * 이 계열도 배율이 없다(`_100` 한 판뿐이다). 그래서 위험한 것은 산수가 아니라
+ * **옮겨 적은 표**이고, 그것을 timm 과 대 보려면 표가 밖에서 보여야 한다.
+ *
+ * 확장이 1 인 단계에 확장 층이 없다는 것도 여기 드러난다 — `mid` 가 `cin` 과 같은
+ * 자리다. 그 자리에 `conv_pw` 를 두면 열쇠가 하나 늘어 체크포인트가 안 실린다.
+ */
+export function mobilenetv2Plan(): Plan {
+  const stages: BlockPlan[][] = [];
+  let cin = STEM_CHANNELS;
+  for (const stage of STAGES) {
+    const blocks: BlockPlan[] = [];
+    for (let i = 0; i < stage.repeats; i += 1) {
+      const kind = stage.expansion === 1 ? "dw" : "ir";
+      blocks.push({
+        kind,
+        cin,
+        cout: stage.cout,
+        // stride 는 단계의 첫 블록만 진다.
+        stride: i === 0 ? stage.stride : 1,
+        mid: kind === "dw" ? cin : cin * stage.expansion,
+      });
+      cin = stage.cout;
+    }
+    stages.push(blocks);
+  }
+  return { stem: STEM_CHANNELS, stages, head: HEAD_CHANNELS };
+}
+
 /**
  * MobileNetV2 (width 1.0, ImageNet).
  *

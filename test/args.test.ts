@@ -12,7 +12,7 @@ import test from "node:test";
 import { BimmError } from "../src/errors.js";
 import { checkArgs, type FactoryArgs } from "../src/args.js";
 
-const RESNET: FactoryArgs = { numClasses: { kind: "int", min: 1 } };
+const RESNET: FactoryArgs = { numClasses: { kind: "int", min: 1, max: 1000 } };
 
 function rejects(given: Record<string, unknown>, mentions: string): void {
   assert.throws(
@@ -53,4 +53,11 @@ test("거절 메시지가 받는 인자 목록을 같이 말한다", () => {
     () => checkArgs("resnet18", RESNET, { classes: 10 }),
     (err: unknown) => err instanceof BimmError && err.message.includes("numClasses"),
   );
+});
+
+test("위쪽 끝을 넘는 값도 거절한다", () => {
+  // **아래쪽만 막으면 오타가 통과한다.** `1000` 을 치려다 `10000` 이 된 것은 정수이고
+  // 1 보다 크므로 다른 검사를 전부 지나가고, 그다음은 브라우저에서 그만한 `Linear`
+  // 를 잡으려는 시도다 — 그 시점에는 실수와 의도를 가릴 방법이 없다.
+  rejects({ numClasses: 10_000 }, "1000");
 });
