@@ -13,7 +13,10 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { BimmError } from "../src/errors.js";
 import { createModel, factorySpec, listModels } from "../src/registry.js";
@@ -91,4 +94,20 @@ test("인자 검사가 모델을 만들기 전에 온다", () => {
       return true;
     },
   );
+});
+
+test("README 의 카탈로그 목록이 표와 갈리지 않는다", () => {
+  // **한동안 갈려 있었다.** 아홉이 실린 뒤에도 README 는 "하나다" 라고 적혀 있었고,
+  // 그 문단은 하나만 둔 이유까지 함께 설명하고 있어서 읽는 사람이 믿을 만했다.
+  // 손으로 갱신되는 사본은 갈리므로, 갈렸을 때 사람이 아니라 이 검사가 먼저 말한다.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const readme = readFileSync(join(here, "..", "..", "README.md"), "utf8");
+
+  const missing = listModels()
+    .map((f) => `${f.library}/${f.factory}`)
+    .filter((name) => !readme.includes(name));
+
+  assert.deepEqual(missing, [],
+    `README 가 이 이름들을 안 적었다: ${missing.join(", ")}\n`
+    + "  src/registry.ts 가 정본이고 README 는 사본이다 — 늘릴 때 같이 늘린다.");
 });

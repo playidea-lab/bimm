@@ -43,25 +43,12 @@
 
 import { nn, type Tensor } from "borch-ts";
 
+import { roundChannels } from "./channels.js";
+
 /** 스템이 내는 채널. */
 const STEM_CHANNELS = 32;
 /** 분류기 앞 채널. */
 const HEAD_CHANNELS = 1280;
-
-/**
- * 배율을 곱한 뒤 8 의 배수로 맞춘다 — timm 의 `round_channels`.
- *
- * **곱셈이 먼저다.** 8 로 맞춘 뒤 곱하면 다른 수가 나오고, 그 차이는 판이 커질수록
- * 벌어진다. 반올림이 원래 값의 90% 아래로 떨어지면 한 칸 올리는 것은 MobileNetV3 의
- * `make_divisible` 과 같은 규칙이다.
- */
-function rounded(channels: number, width: number): number {
-  if (width === 1) return channels;
-  const target = channels * width;
-  let out = Math.max(8, Math.floor(target + 4) - (Math.floor(target + 4) % 8));
-  if (out < 0.9 * target) out += 8;
-  return out;
-}
 
 interface Stage {
   readonly kernel: number;
@@ -185,7 +172,7 @@ export class EfficientNet extends nn.Module {
 
   constructor(numClasses: number, width = 1, depth = 1) {
     super();
-    const stem = rounded(STEM_CHANNELS, width);
+    const stem = roundChannels(STEM_CHANNELS, width);
     this.conv_stem = new nn.Conv2d(3, stem, 3, 2, 1, 1, 1, false);
     this.bn1 = new nn.BatchNormND(stem);
 
@@ -193,7 +180,7 @@ export class EfficientNet extends nn.Module {
     let cin = stem;
     for (const [index, stage] of B0.entries()) {
       const built: nn.Module[] = [];
-      const cout = rounded(stage.cout, width);
+      const cout = roundChannels(stage.cout, width);
       // 반복은 올림이다 — timm 이 `ceil(n * depth)` 로 센다.
       const repeats = Math.ceil(stage.repeats * depth);
       for (let i = 0; i < repeats; i += 1) {
@@ -207,7 +194,7 @@ export class EfficientNet extends nn.Module {
     }
     this.blocks = new nn.Sequential(stages);
 
-    const head = rounded(HEAD_CHANNELS, width);
+    const head = roundChannels(HEAD_CHANNELS, width);
     this.conv_head = new nn.Conv2d(cin, head, 1, 1, 0, 1, 1, false);
     this.bn2 = new nn.BatchNormND(head);
     this.classifier = new nn.Linear(head, numClasses);
