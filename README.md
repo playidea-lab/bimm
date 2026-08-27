@@ -112,6 +112,7 @@ Package name too similar to existing packages bigi,bili,boom,jimp,mime,viem
 | `timm/efficientnet_b2` | | CDN 에 있음 |
 | `timm/efficientnet_b3` | | CDN 에 있음 |
 | `timm/vit_tiny_patch16_224` | | CDN 에 있음 |
+| `timm/resnet50` | | 아직 |
 
 **빈 표에 자리만 잡아두지 않는다** — 코어 저장소가 여러 번 적어둔 대로 사용자 없는
 표면은 케이스가 안 생기고, 케이스 없는 표면이 조용히 틀린다. 이름은 하나씩, 그 모델을
