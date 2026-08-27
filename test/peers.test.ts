@@ -57,3 +57,21 @@ test("검사가 도는 코어도 같은 규칙을 따른다", () => {
   assert.ok(!range.startsWith("^0."), `borch-ts: '${range}' — 위와 같은 이유`);
   assert.match(range, /<1\.0\.0/, `borch-ts: '${range}' — 0.x 안에서만`);
 });
+
+test("판 번호가 적힌 두 곳이 같은 수를 말한다", () => {
+  // **`npm ci` 는 이 불일치로 안 멈춘다**(borch 에서 실측). 그래서 CI 는 초록이고,
+  // 다음 사람이 `npm install` 을 하는 날 잠금이 조용히 바뀌어 자기 변경과 무관한
+  // diff 로 올라온다 — 그 사람은 안 건드린 것을 커밋하거나 되돌리느라 시간을 쓴다.
+  //
+  // 0.7.0 을 낼 때 실제로 그렇게 됐다. `package.json` 은 올렸고 잠금은 0.6.0 에
+  // 남았다. borch 쪽에서 같은 자리를 찾고 나서야 여기도 보게 됐다.
+  const read = (name: string): { version?: string; packages?: Record<string, { version?: string }> } =>
+    JSON.parse(readFileSync(join(ROOT, name), "utf8")) as never;
+  const declared = read("package.json").version;
+  const lock = read("package-lock.json");
+
+  assert.equal(lock.version, declared,
+    `package-lock.json 의 루트는 ${lock.version}, package.json 은 ${declared} — 같이 고쳐라`);
+  assert.equal(lock.packages?.[""]?.version, declared,
+    `package-lock.json 의 packages[""] 도 같아야 한다`);
+});
