@@ -13,6 +13,12 @@ import { BimmError } from "./errors.js";
 export interface ArgSpec {
   readonly kind: "int";
   readonly min: number;
+  /**
+   * 위쪽 끝. **없으면 오타가 통과한다** — `numClasses: 10000000` 은 정수이고 1 보다
+   * 크므로 아래 검사를 전부 지나가고, 그다음은 브라우저에서 그만한 `Linear` 를
+   * 잡으려는 시도다. 자리 하나를 잘못 누른 것과 구별할 방법이 그 시점에는 없다.
+   */
+  readonly max: number;
 }
 
 export type FactoryArgs = Readonly<Record<string, ArgSpec>>;
@@ -60,8 +66,10 @@ export function checkArgs(
     if (typeof value !== "number" || !Number.isInteger(value)) {
       throw new BimmError(`${factory}.${key} 는 정수여야 합니다 — ${String(value)} 를 받았습니다`);
     }
-    if (value < argSpec.min) {
-      throw new BimmError(`${factory}.${key} 는 ${argSpec.min} 이상이어야 합니다 — ${value}`);
+    if (value < argSpec.min || value > argSpec.max) {
+      throw new BimmError(
+        `${factory}.${key} 는 ${argSpec.min} 이상 ${argSpec.max} 이하여야 합니다 — ${value}`,
+      );
     }
     out[key] = value;
   }
