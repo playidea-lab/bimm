@@ -46,6 +46,52 @@ const MLP_RATIO = 4;
 const NORM_EPS = 1e-6;
 
 /**
+ * 이 판이 쓰는 수 전부 — 상수 여섯에서 나오는 것까지.
+ *
+ * ViT 는 앞의 합성곱 계열과 성격이 다르다. 표가 없고 상수 몇 개뿐이지만, **그
+ * 상수에서 파생되는 수들**이 어긋날 자리다 — 패치 수, head 하나가 보는 차원,
+ * qkv 가 내는 폭, MLP 가 넓히는 폭, `pos_embed` 의 길이.
+ *
+ * 이 다섯은 전부 곱셈이나 나눗셈 하나이고, 그래서 **틀려도 그럴듯하다.** 예를 들어
+ * `pos_embed` 길이를 196 으로 두면(cls 토큰을 빼먹으면) 모양이 하나 어긋난 채
+ * 나머지는 다 맞아 보인다.
+ */
+export interface VitPlan {
+  readonly dim: number;
+  readonly depth: number;
+  readonly heads: number;
+  /** head 하나가 보는 차원. `dim / heads` 다. */
+  readonly headDim: number;
+  readonly patch: number;
+  /** 한 장이 내는 패치 수. `(224 / patch)^2` 다. */
+  readonly patches: number;
+  /** `pos_embed` 의 길이 — **패치 수 + cls 토큰 하나.** */
+  readonly posLen: number;
+  /** qkv 한 층이 내는 폭. 셋을 함께 내므로 `dim * 3` 이다. */
+  readonly qkvOut: number;
+  /** MLP 가 넓히는 폭. */
+  readonly mlpHidden: number;
+  readonly normEps: number;
+}
+
+/** 위 수들을 상수에서 뽑는다. 층을 만들지 않으므로 GPU 없이 검사된다. */
+export function vitTinyPlan(imageSize = 224): VitPlan {
+  const patches = (imageSize / PATCH) ** 2;
+  return {
+    dim: DIM,
+    depth: DEPTH,
+    heads: HEADS,
+    headDim: DIM / HEADS,
+    patch: PATCH,
+    patches,
+    posLen: patches + 1,
+    qkvOut: DIM * 3,
+    mlpHidden: DIM * MLP_RATIO,
+    normEps: NORM_EPS,
+  };
+}
+
+/**
  * 토큰끼리 서로를 본다.
  *
  * `qkv` 가 셋을 함께 내므로 `narrow` 로 갈라 쓴다 — 열쇠를 timm 과 맞추려면 층을
