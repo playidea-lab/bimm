@@ -27,7 +27,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { type BlockPlan, resnet50Plan } from "../src/resnet50.js";
+import { type BlockPlan, RESNETS, resnetPlan } from "../src/resnet50.js";
 
 interface Down {
   readonly cin: number;
@@ -46,19 +46,19 @@ interface Row {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TIMM = JSON.parse(
-  readFileSync(join(here, "..", "..", "test", "resnet50-plan.json"), "utf8"),
-) as {
-  readonly resnet50: {
-    readonly stem: number;
-    readonly layers: readonly (readonly Row[])[];
-    readonly fcIn: number;
-    readonly keys: number;
-  };
-};
+  readFileSync(join(here, "..", "..", "test", "resnet-plan.json"), "utf8"),
+) as Readonly<Record<string, {
+  readonly block: string;
+  readonly stem: number;
+  readonly layers: readonly (readonly Row[])[];
+  readonly fcIn: number;
+  readonly keys: number;
+}>>;
 
-test("resnet50 의 계획이 timm 과 같다", () => {
-  const want = TIMM.resnet50;
-  const got = resnet50Plan();
+for (const [name, want] of Object.entries(TIMM)) {
+  test(`${name} 의 계획이 timm 과 같다`, () => {
+  const got = resnetPlan(name);
+  assert.equal(got.block, want.block, "블록 종류");
 
   assert.equal(got.stem, want.stem, "stem");
   assert.equal(got.fcIn, want.fcIn, "fc 가 받는 폭");
@@ -89,13 +89,14 @@ test("resnet50 의 계획이 timm 과 같다", () => {
       }
     }
   }
-});
+  });
+}
 
-test("layer1 의 첫 블록도 downsample 을 든다", () => {
+test("Bottleneck 은 layer1 의 첫 블록도 downsample 을 든다", () => {
   // **stride 가 1 인데 필요한 자리다.** 채널이 64 에서 256 으로 바뀌기 때문이고,
   // `stride > 1` 을 조건으로 읽으면 여기만 빠진다. 조건을 그렇게 쓰는 것은 그럴듯해서
   // 따로 못박는다.
-  const first = resnet50Plan().layers[0]?.[0];
+  const first = resnetPlan("resnet50").layers[0]?.[0];
   assert.ok(first, "layer1 의 첫 블록이 없다");
   assert.equal(first.stride, 1, "layer1 은 크기를 안 줄인다");
   assert.ok(first.downsample, "그래도 downsample 은 있어야 한다 — 채널이 바뀐다");
@@ -103,19 +104,48 @@ test("layer1 의 첫 블록도 downsample 을 든다", () => {
   assert.equal(first.downsample.cout, 256);
 });
 
-test("downsample 은 각 layer 의 첫 블록에만 있다", () => {
-  for (const [l, blocks] of resnet50Plan().layers.entries()) {
-    for (const [b, block] of blocks.entries()) {
-      assert.equal(block.downsample !== null, b === 0,
-        `layer${l + 1}.${b}: downsample 은 첫 블록에만 있어야 한다`);
+test("downsample 은 모양이 바뀌는 자리에만 있다", () => {
+  // **"첫 블록" 이 아니라 "모양이 바뀌는가" 다.** Bottleneck 은 넓히므로 네 layer 의
+  // 첫 블록이 전부 해당하지만, BasicBlock 은 안 넓혀서 `layer1` 의 첫 블록이
+  // 해당하지 않는다 — stride 도 1 이고 채널도 그대로다. 조건을 "첫 블록" 으로 쓰면
+  // resnet18 의 `layer1` 에 timm 에 없는 열쇠 둘이 생긴다.
+  for (const name of RESNETS) {
+    for (const [l, blocks] of resnetPlan(name).layers.entries()) {
+      for (const [b, block] of blocks.entries()) {
+        const changes = block.stride !== 1 || block.cin !== block.cout;
+        assert.equal(block.downsample !== null, changes,
+          `${name} layer${l + 1}.${b}: 모양이 바뀌는 자리에만 있어야 한다`);
+      }
     }
   }
 });
 
-test("넓히는 배수가 4 다", () => {
-  // Bottleneck 을 Bottleneck 이게 하는 수다. 3 이나 2 로 두면 채널이 전부 어긋난다.
-  for (const block of resnet50Plan().layers.flat()) {
-    assert.equal(block.cout, block.width * 4,
-      `좁힌 폭 ${block.width} 는 ${block.width * 4} 로 넓혀져야 한다`);
+test("BasicBlock 의 layer1 에는 downsample 이 없다", () => {
+  // Bottleneck 쪽과 정반대다. 두 검사를 나란히 두는 것은 **한쪽 규칙을 다른 쪽에
+  // 적용하는 것**이 이 계열에서 가장 그럴듯한 실수이기 때문이다.
+  for (const name of ["resnet18", "resnet34"]) {
+    const first = resnetPlan(name).layers[0]?.[0];
+    assert.ok(first, `${name} 의 layer1 첫 블록이 없다`);
+    assert.equal(first.cin, first.cout, `${name}: 넓히지 않으므로 채널이 같다`);
+    assert.equal(first.downsample, null, `${name}: 맞출 것이 없으므로 없어야 한다`);
   }
+});
+
+test("넓히는 배수가 블록 종류를 따른다", () => {
+  // Bottleneck 을 Bottleneck 이게 하는 수다. basic 은 1, bottleneck 은 4 이고,
+  // 섞이면 채널이 전부 어긋난다.
+  for (const name of RESNETS) {
+    const plan = resnetPlan(name);
+    const want = plan.block === "basic" ? 1 : 4;
+    for (const block of plan.layers.flat()) {
+      assert.equal(block.cout, block.width * want,
+        `${name}: 좁힌 폭 ${block.width} 는 ${block.width * want} 여야 한다`);
+    }
+  }
+});
+
+test("픽스처가 다섯 판을 다 든다", () => {
+  // 판을 늘리고 픽스처를 안 늘리면 위 검사들이 **조용히 줄어든다** — 실패가 아니라
+  // 그냥 안 물어본 것이 되고, 화면은 초록이다.
+  assert.deepEqual(Object.keys(TIMM).sort(), [...RESNETS].sort());
 });

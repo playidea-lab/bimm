@@ -22,7 +22,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { type BlockPlan, mobilenetv2Plan } from "../src/mobilenet.js";
-import { vitTinyPlan } from "../src/vit.js";
+import { VARIANTS, vitPlan } from "../src/vit.js";
 
 interface V2Row {
   readonly kind: string;
@@ -38,7 +38,7 @@ interface Fixtures {
     readonly stages: readonly (readonly V2Row[])[];
     readonly head: number;
   };
-  readonly vit_tiny_patch16_224: Readonly<Record<string, number>>;
+  readonly vit: Readonly<Record<string, Readonly<Record<string, string | number>>>>;
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -84,16 +84,37 @@ test("확장이 1 인 단계에만 확장 층이 없다", () => {
   }
 });
 
-test("vit_tiny_patch16_224 의 수가 timm 과 같다", () => {
-  const want = TIMM.vit_tiny_patch16_224;
-  const got = vitTinyPlan() as unknown as Readonly<Record<string, number>>;
-  for (const key of Object.keys(want)) {
-    assert.equal(got[key], want[key], `${key}`);
+for (const [name, want] of Object.entries(TIMM.vit)) {
+  test(`${name} 의 수가 timm 과 같다`, () => {
+    const which = want["variant"] as keyof typeof VARIANTS;
+    const v = VARIANTS[which];
+    assert.ok(v, `모르는 판: ${String(which)}`);
+    const got = vitPlan(v) as unknown as Readonly<Record<string, number>>;
+    for (const key of Object.keys(want)) {
+      if (key === "variant") continue;
+      assert.equal(got[key], want[key], `${name} 의 ${key}`);
+    }
+  });
+}
+
+test("세 판이 dim 과 heads 로만 갈린다", () => {
+  // 이 문장이 이 계열에서 판을 늘리는 값을 정한다. depth·eps·mlp 배수까지 갈리면
+  // 판마다 표가 필요하고, 그러면 계열을 늘리는 것과 값이 같아진다. timm 에 물어
+  // 확인했고, 갈리는 날 여기가 먼저 빨개진다.
+  const plans = Object.values(VARIANTS).map((v) => vitPlan(v));
+  const [first] = plans;
+  assert.ok(first);
+  for (const p of plans) {
+    assert.equal(p.depth, first.depth, "깊이");
+    assert.equal(p.normEps, first.normEps, "eps");
+    assert.equal(p.mlpHidden / p.dim, first.mlpHidden / first.dim, "MLP 배수");
+    assert.equal(p.patches, first.patches, "패치 수");
   }
+  assert.equal(new Set(plans.map((p) => p.dim)).size, 3, "dim 은 셋이 달라야 한다");
 });
 
 test("ViT 의 파생값이 상수에서 실제로 나온다", () => {
-  const p = vitTinyPlan();
+  const p = vitPlan(VARIANTS.tiny);
   // 픽스처와 대 보는 것만으로는 **상수를 무시하고 수를 박아 넣은 경우**를 못 잡는다.
   // 관계식이 성립하는지를 따로 본다.
   assert.equal(p.headDim * p.heads, p.dim, "head 차원 × head 수 = 임베딩 차원");
@@ -101,7 +122,7 @@ test("ViT 의 파생값이 상수에서 실제로 나온다", () => {
   assert.equal(p.qkvOut, p.dim * 3, "qkv 는 셋을 함께 낸다");
 
   // 다른 크기에서도 관계가 유지되는지 — 224 에만 맞춰 박아 둔 수는 여기서 걸린다.
-  const bigger = vitTinyPlan(384);
+  const bigger = vitPlan(VARIANTS.tiny, 384);
   assert.equal(bigger.patches, (384 / 16) ** 2, "384 의 패치 수");
   assert.equal(bigger.posLen, bigger.patches + 1, "384 의 pos_embed 길이");
 });

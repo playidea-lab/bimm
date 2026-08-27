@@ -34,9 +34,10 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build",
-    "test": "tsc -p tsconfig.json && node --test dist/test/*.js",
+    "test": "npm run clean && tsc -p tsconfig.json && node --test dist/test/*.js",
     "parity": "uv run --with playwright --with timm --with torch --with safetensors --with numpy python browser/parity.py",
-    "test:no-compare": "tsc -p tsconfig.json && node --test dist/test/args.test.js dist/test/registry.test.js"
+    "test:no-compare": "tsc -p tsconfig.json && node --test dist/test/args.test.js dist/test/registry.test.js",
+    "clean": "rm -rf dist"
   },
   "//": [
     "이 패키지의 npm 이름은 `bimm-ts` 다. `bimm` 이 아니다 — 레지스트리의 유사성 필터가",
