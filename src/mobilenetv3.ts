@@ -25,6 +25,8 @@
 
 import { nn, type Tensor } from "borch-ts";
 
+import { makeDivisible } from "./channels.js";
+
 /** stem 이 내는 채널. 두 판이 같다. */
 const STEM_CHANNELS = 16;
 
@@ -42,19 +44,8 @@ interface Block {
   readonly act: Act;
 }
 
-/**
- * SE 가 좁히는 채널 수 — torch 의 `make_divisible(mid * 0.25, 8)`.
- *
- * **0.25 를 곱하고 끝나지 않는다.** 8 의 배수로 맞추되, 반올림이 원래 값의 90% 아래로
- * 떨어지면 한 칸 올린다. 72 → 18 → 16 은 16.2 보다 작으므로 24 가 된다. 이 한 줄이
- * 없으면 그 블록만 채널이 어긋나고, 가중치는 모양이 안 맞아 실리지 않는다.
- */
-function reduced(mid: number): number {
-  const target = mid * 0.25;
-  let out = Math.max(8, Math.floor(target + 4) - (Math.floor(target + 4) % 8));
-  if (out < 0.9 * target) out += 8;
-  return out;
-}
+/** SE 가 좁히는 비율. timm 의 `se_ratio` 는 이 계열에서 0.25 로 고정이다. */
+const SE_RATIO = 0.25;
 
 /**
  * 채널마다 하나의 수를 뽑아 채널을 저울질한다.
@@ -68,7 +59,8 @@ class SqueezeExcite extends nn.Module {
 
   constructor(channels: number) {
     super();
-    const rd = reduced(channels);
+    // SE 가 좁히는 채널 — timm 의 `make_divisible(mid * 0.25, 8)`.
+    const rd = makeDivisible(channels * SE_RATIO);
     // **bias 가 있다.** 이 두 conv 는 1×1 격자 위에서 도는 작은 완전연결이고,
     // timm 이 bias 를 켜 둔다.
     this.conv_reduce = new nn.Conv2d(channels, rd, 1, 1, 0, 1, 1, true);
