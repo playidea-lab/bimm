@@ -138,16 +138,45 @@
     ],
     "head": 1280
   },
-  "vit_tiny_patch16_224": {
-    "dim": 192,
-    "depth": 12,
-    "heads": 3,
-    "headDim": 64,
-    "patch": 16,
-    "patches": 196,
-    "posLen": 197,
-    "qkvOut": 576,
-    "mlpHidden": 768,
-    "normEps": 1e-06
+  "vit": {
+    "vit_tiny_patch16_224": {
+      "variant": "tiny",
+      "dim": 192,
+      "depth": 12,
+      "heads": 3,
+      "headDim": 64,
+      "patch": 16,
+      "patches": 196,
+      "posLen": 197,
+      "qkvOut": 576,
+      "mlpHidden": 768,
+      "normEps": 1e-06
+    },
+    "vit_small_patch16_224": {
+      "variant": "small",
+      "dim": 384,
+      "depth": 12,
+      "heads": 6,
+      "headDim": 64,
+      "patch": 16,
+      "patches": 196,
+      "posLen": 197,
+      "qkvOut": 1152,
+      "mlpHidden": 1536,
+      "normEps": 1e-06
+    },
+    "vit_base_patch16_224": {
+      "variant": "base",
+      "dim": 768,
+      "depth": 12,
+      "heads": 12,
+      "headDim": 64,
+      "patch": 16,
+      "patches": 196,
+      "posLen": 197,
+      "qkvOut": 2304,
+      "mlpHidden": 3072,
+      "normEps": 1e-06
+    }
   }
 }

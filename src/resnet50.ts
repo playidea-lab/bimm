@@ -37,25 +37,36 @@
 
 import { nn, type Tensor } from "borch-ts";
 
-/** 스템이 내는 채널. */
+/** 스템이 내는 채널. 다섯 판이 같다. */
 const STEM_CHANNELS = 64;
-/** Bottleneck 이 마지막 1×1 로 넓히는 배수. */
-const EXPANSION = 4;
+/** 각 layer 가 좁혀서 보는 폭. 다섯 판이 같다. */
+const WIDTHS = [64, 128, 256, 512] as const;
+/** 첫 블록의 stride. `layer1` 만 크기를 안 줄인다. */
+const STRIDES = [1, 2, 2, 2] as const;
 
-/** layer 하나의 규격 — 좁혀서 보는 폭과 블록 수, 첫 블록의 stride. */
-interface Stage {
-  readonly width: number;
-  readonly blocks: number;
-  readonly stride: number;
+/**
+ * 한 판을 정하는 것 둘 — **블록 종류와 블록 수.**
+ *
+ * `basic` 은 3×3 을 둘 쌓고 넓히지 않는다(배수 1). `bottleneck` 은 1×1 로 좁혀
+ * 3×3 으로 보고 1×1 로 **네 배** 넓힌다. 같은 깊이에 파라미터가 덜 들어서 50 층
+ * 이상이 실용적인 크기에 머문다.
+ *
+ * 그래서 `resnet18` 과 `resnet34` 는 블록 수만 다르고, `resnet50` 과 `resnet18` 은
+ * 블록 자체가 다르다. 이 표는 그 둘을 한 축에 놓는다.
+ */
+interface Variant {
+  readonly block: "basic" | "bottleneck";
+  readonly blocks: readonly [number, number, number, number];
 }
 
-/** timm 의 `resnet50`. 블록 수 [3, 4, 6, 3] 이 이 판을 정한다. */
-const STAGES: readonly Stage[] = [
-  { width: 64, blocks: 3, stride: 1 },
-  { width: 128, blocks: 4, stride: 2 },
-  { width: 256, blocks: 6, stride: 2 },
-  { width: 512, blocks: 3, stride: 2 },
-];
+/** timm 이 세우는 수다. 층에서 읽었다. */
+const VARIANT: Readonly<Record<string, Variant>> = {
+  resnet18: { block: "basic", blocks: [2, 2, 2, 2] },
+  resnet34: { block: "basic", blocks: [3, 4, 6, 3] },
+  resnet50: { block: "bottleneck", blocks: [3, 4, 6, 3] },
+  resnet101: { block: "bottleneck", blocks: [3, 4, 23, 3] },
+  resnet152: { block: "bottleneck", blocks: [3, 8, 36, 3] },
+};
 
 /** 지름길을 맞추는 1×1. 첫 블록에만 있다. */
 export interface DownsamplePlan {
@@ -83,6 +94,8 @@ export interface Plan {
   /** `layer1`..`layer4`. 묶음이 곧 열쇠 이름이다. */
   readonly layers: readonly (readonly BlockPlan[])[];
   readonly fcIn: number;
+  /** 어느 블록을 쌓는가. 열쇠 이름이 여기서 갈린다 — basic 은 `conv3` 가 없다. */
+  readonly block: "basic" | "bottleneck";
 }
 
 /**
@@ -91,27 +104,46 @@ export interface Plan {
  * 다른 계열과 같은 이유다 — 층은 GPU 를 요구하고 수는 요구하지 않으므로, 이 산수는
  * `npm test` 에서 timm 과 대 볼 수 있다.
  */
-export function resnet50Plan(): Plan {
+export function resnetPlan(name: string): Plan {
+  const v = VARIANT[name];
+  if (v === undefined) {
+    throw new Error(`알 수 없는 판: ${name} — ${Object.keys(VARIANT).join(", ")}`);
+  }
+  const expansion = v.block === "basic" ? 1 : 4;
   const layers: BlockPlan[][] = [];
   let cin = STEM_CHANNELS;
-  for (const stage of STAGES) {
+  for (const [s, width] of WIDTHS.entries()) {
     const blocks: BlockPlan[] = [];
-    const cout = stage.width * EXPANSION;
-    for (let i = 0; i < stage.blocks; i += 1) {
-      const stride = i === 0 ? stage.stride : 1;
+    const cout = width * expansion;
+    const count = v.blocks[s] ?? 0;
+    for (let i = 0; i < count; i += 1) {
+      const stride = i === 0 ? (STRIDES[s] ?? 1) : 1;
+      // **첫 블록이어도 할 일이 없으면 안 둔다.**
+      //
+      // Bottleneck 의 `layer1` 은 stride 가 1 인데도 downsample 을 든다 — 채널이
+      // 64 에서 256 으로 바뀌기 때문이다. BasicBlock 의 `layer1` 은 넓히지 않으므로
+      // (배수 1) 채널도 그대로고 stride 도 1 이라 **아무것도 맞출 것이 없다.**
+      //
+      // 그래서 조건은 "첫 블록" 이 아니라 **"모양이 바뀌는가"** 다. 앞의 것으로 쓰면
+      // resnet18 의 `layer1` 에 없는 열쇠 둘이 생긴다.
+      const changes = stride !== 1 || cin !== cout;
       blocks.push({
         cin,
-        width: stage.width,
+        width,
         cout,
         stride,
-        // **첫 블록만.** 채널이 바뀌거나 stride 가 서는 자리가 거기뿐이다.
-        downsample: i === 0 ? { cin, cout, stride } : null,
+        downsample: changes ? { cin, cout, stride } : null,
       });
       cin = cout;
     }
     layers.push(blocks);
   }
-  return { stem: STEM_CHANNELS, layers, fcIn: cin };
+  return { stem: STEM_CHANNELS, layers, fcIn: cin, block: v.block };
+}
+
+/** 이름을 남겨 둔 것은 이미 쓰는 곳이 있어서다. */
+export function resnet50Plan(): Plan {
+  return resnetPlan("resnet50");
 }
 
 /**
@@ -158,12 +190,49 @@ export class Bottleneck extends nn.Module {
 }
 
 /**
+ * 3×3 을 둘. **넓히지 않는다**(배수 1).
+ *
+ * `conv3`·`bn3` 가 없다는 것이 Bottleneck 과 갈리는 자리이고, 그것이 곧 열쇠
+ * 이름의 차이다. 두 블록을 한 클래스로 합치면 안 쓰는 층이 열쇠를 만들거나 조건이
+ * 붙은 필드가 생기고, 둘 다 체크포인트를 깬다.
+ */
+export class BasicBlock extends nn.Module {
+  private readonly conv1: nn.Conv2d;
+  private readonly bn1: nn.BatchNormND;
+  private readonly conv2: nn.Conv2d;
+  private readonly bn2: nn.BatchNormND;
+  private readonly downsample: nn.Sequential | null;
+
+  constructor(plan: BlockPlan) {
+    super();
+    // **stride 는 첫 3×3 이 진다.** Bottleneck 은 가운데가 지는데, 이쪽은 셋이
+    // 아니라 둘이라 "가운데" 가 없다.
+    this.conv1 = new nn.Conv2d(plan.cin, plan.width, 3, plan.stride, 1, 1, 1, false);
+    this.bn1 = new nn.BatchNormND(plan.width);
+    this.conv2 = new nn.Conv2d(plan.width, plan.cout, 3, 1, 1, 1, 1, false);
+    this.bn2 = new nn.BatchNormND(plan.cout);
+    this.downsample = plan.downsample === null ? null : new nn.Sequential([
+      new nn.Conv2d(plan.downsample.cin, plan.downsample.cout, 1,
+        plan.downsample.stride, 0, 1, 1, false),
+      new nn.BatchNormND(plan.downsample.cout),
+    ]);
+  }
+
+  override forward(x: Tensor): Tensor {
+    let h = this.bn1.forward(this.conv1.forward(x)).unary("relu");
+    h = this.bn2.forward(this.conv2.forward(h));
+    const shortcut = this.downsample === null ? x : this.downsample.forward(x);
+    return h.add(shortcut).unary("relu");
+  }
+}
+
+/**
  * ResNet-50.
  *
  * `global_pool` 과 `act1` 은 여기 층으로 두지 않는다 — 파라미터가 없어 열쇠를
  * 만들지 않으므로 `forward` 에서 부른다. 다른 계열에서와 같은 규칙이다.
  */
-export class ResNet50 extends nn.Module {
+export class ResNet extends nn.Module {
   private readonly conv1: nn.Conv2d;
   private readonly bn1: nn.BatchNormND;
   private readonly layer1: nn.Sequential;
@@ -173,9 +242,9 @@ export class ResNet50 extends nn.Module {
   private readonly fc: nn.Linear;
   private readonly fcIn: number;
 
-  constructor(numClasses: number) {
+  constructor(numClasses: number, name = "resnet50") {
     super();
-    const plan = resnet50Plan();
+    const plan = resnetPlan(name);
     // 7×7 stride 2 — CIFAR 판의 3×3 stride 1 과 갈리는 첫 자리다.
     this.conv1 = new nn.Conv2d(3, plan.stem, 7, 2, 3, 1, 1, false);
     this.bn1 = new nn.BatchNormND(plan.stem);
@@ -183,7 +252,9 @@ export class ResNet50 extends nn.Module {
     // **넷을 각자 필드로 둔다.** `Sequential` 하나에 담으면 열쇠가 `layers.0...`
     // 이 되어 timm 의 `layer1...` 과 갈린다.
     const build = (i: number): nn.Sequential =>
-      new nn.Sequential((plan.layers[i] ?? []).map((b) => new Bottleneck(b)));
+      new nn.Sequential((plan.layers[i] ?? []).map((b) => (plan.block === "basic"
+        ? new BasicBlock(b)
+        : new Bottleneck(b))));
     this.layer1 = build(0);
     this.layer2 = build(1);
     this.layer3 = build(2);
@@ -208,7 +279,30 @@ export class ResNet50 extends nn.Module {
   }
 }
 
-/** timm 의 `resnet50`. */
-export function resnet50(numClasses: number): ResNet50 {
-  return new ResNet50(numClasses);
+/** timm 의 `resnet18`. BasicBlock 을 [2,2,2,2] 로 쌓는다. */
+export function resnet18(numClasses: number): ResNet {
+  return new ResNet(numClasses, "resnet18");
 }
+
+/** timm 의 `resnet34`. resnet18 과 블록 수만 다르다. */
+export function resnet34(numClasses: number): ResNet {
+  return new ResNet(numClasses, "resnet34");
+}
+
+/** timm 의 `resnet50`. */
+export function resnet50(numClasses: number): ResNet {
+  return new ResNet(numClasses, "resnet50");
+}
+
+/** timm 의 `resnet101`. resnet50 과 `layer3` 의 깊이만 다르다(6 → 23). */
+export function resnet101(numClasses: number): ResNet {
+  return new ResNet(numClasses, "resnet101");
+}
+
+/** timm 의 `resnet152`. */
+export function resnet152(numClasses: number): ResNet {
+  return new ResNet(numClasses, "resnet152");
+}
+
+/** 판 이름들. 검사가 다섯을 같은 자리에서 묻는다. */
+export const RESNETS = Object.keys(VARIANT);

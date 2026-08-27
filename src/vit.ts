@@ -35,15 +35,30 @@
 
 import { nn, Tensor } from "borch-ts";
 
-/** ViT-Tiny/16 의 수. 판을 늘릴 때 갈리는 것은 이 네 개다. */
-const DIM = 192;
-const HEADS = 3;
-const DEPTH = 12;
+/** 패치 한 변. `/16` 판들이 전부 이 수다. */
 const PATCH = 16;
-/** MLP 가 넓히는 배수. timm 의 `mlp_ratio` 는 4 로 고정이다. */
+/** MLP 가 넓히는 배수. timm 의 `mlp_ratio` 는 이 계열에서 4 로 고정이다. */
 const MLP_RATIO = 4;
 /** LayerNorm 의 eps. torch 기본값(1e-5)이 아니라 **1e-6** 이다. */
 const NORM_EPS = 1e-6;
+
+/**
+ * 한 판을 정하는 수들.
+ *
+ * **tiny·small·base 가 갈리는 것은 `dim` 과 `heads` 둘뿐이다.** 깊이도 MLP 배수도
+ * eps 도 셋이 같다 — timm 에 물어 확인했다. 그래서 판을 늘리는 일이 계열을 늘리는
+ * 일과 값이 다르다: 이쪽은 표에 줄 하나이고, 저쪽은 코어에 없는 연산을 만난다.
+ */
+interface Variant {
+  readonly dim: number;
+  readonly heads: number;
+  readonly depth: number;
+}
+
+/** timm 이 실제로 세우는 수다. 표를 보고 옮긴 것이 아니라 층에서 읽었다. */
+const TINY: Variant = { dim: 192, heads: 3, depth: 12 };
+const SMALL: Variant = { dim: 384, heads: 6, depth: 12 };
+const BASE: Variant = { dim: 768, heads: 12, depth: 12 };
 
 /**
  * 이 판이 쓰는 수 전부 — 상수 여섯에서 나오는 것까지.
@@ -75,20 +90,25 @@ export interface VitPlan {
 }
 
 /** 위 수들을 상수에서 뽑는다. 층을 만들지 않으므로 GPU 없이 검사된다. */
-export function vitTinyPlan(imageSize = 224): VitPlan {
+export function vitPlan(v: Variant, imageSize = 224): VitPlan {
   const patches = (imageSize / PATCH) ** 2;
   return {
-    dim: DIM,
-    depth: DEPTH,
-    heads: HEADS,
-    headDim: DIM / HEADS,
+    dim: v.dim,
+    depth: v.depth,
+    heads: v.heads,
+    headDim: v.dim / v.heads,
     patch: PATCH,
     patches,
     posLen: patches + 1,
-    qkvOut: DIM * 3,
-    mlpHidden: DIM * MLP_RATIO,
+    qkvOut: v.dim * 3,
+    mlpHidden: v.dim * MLP_RATIO,
     normEps: NORM_EPS,
   };
+}
+
+/** tiny 판. 이름을 남겨 둔 것은 이미 쓰는 곳이 있어서다. */
+export function vitTinyPlan(imageSize = 224): VitPlan {
+  return vitPlan(TINY, imageSize);
 }
 
 /**
@@ -101,6 +121,7 @@ class Attention extends nn.Module {
   private readonly qkv: nn.Linear;
   private readonly proj: nn.Linear;
   private readonly headDim: number;
+  private readonly heads: number;
   private readonly scale: number;
 
   constructor(dim: number, heads: number) {
@@ -108,6 +129,9 @@ class Attention extends nn.Module {
     this.qkv = new nn.Linear(dim, dim * 3, true);
     this.proj = new nn.Linear(dim, dim, true);
     this.headDim = dim / heads;
+    // **머리 수를 들고 있어야 한다.** 전에는 모듈 상수를 봤는데, 그것은 판이
+    // 하나일 때만 맞는다 — small 은 6 이고 base 는 12 다.
+    this.heads = heads;
     // **곱하기 전에 나눈다.** torch 도 `q * scale` 을 먼저 하고, 순서를 바꾸면 큰
     // 내적에서 float32 가 먼저 넘친다.
     this.scale = 1 / Math.sqrt(this.headDim);
@@ -115,18 +139,18 @@ class Attention extends nn.Module {
 
   override forward(x: Tensor): Tensor {
     const [batch = 1, tokens = 1] = x.shape;
-    const dim = this.headDim * HEADS;
+    const dim = this.headDim * this.heads;
 
     const fused = this.qkv.forward(x);                       // [B, N, 3D]
     // [B, N, 3, H, d] → [3, B, H, N, d] 로 세우면 셋을 같은 모양으로 꺼낼 수 있다.
-    const parts = fused.reshape([batch, tokens, 3, HEADS, this.headDim])
+    const parts = fused.reshape([batch, tokens, 3, this.heads, this.headDim])
       .permute([2, 0, 3, 1, 4]);
     const q = parts.select(0, 0);
     const k = parts.select(0, 1);
     const v = parts.select(0, 2);
 
     // 헤드를 배치로 접어 `bmm` 에 넣는다 — 코어의 행렬곱은 3 차원까지 본다.
-    const folded = [batch * HEADS, tokens, this.headDim];
+    const folded = [batch * this.heads, tokens, this.headDim];
     // 스칼라 곱도 텐서를 거친다 — 코어의 `mul` 은 텐서만 받고, 0 차원은
     // 브로드캐스트로 펼쳐진다.
     const qf = q.reshape(folded).mul(Tensor.owned([], this.scale));
@@ -138,7 +162,7 @@ class Attention extends nn.Module {
     const mixed = weights.bmm(vf);                           // [B*H, N, d]
 
     // 접었던 헤드를 다시 펴서 [B, N, D] 로.
-    const merged = mixed.reshape([batch, HEADS, tokens, this.headDim])
+    const merged = mixed.reshape([batch, this.heads, tokens, this.headDim])
       .permute([0, 2, 1, 3])
       .reshape([batch, tokens, dim]);
     return this.proj.forward(merged);
@@ -199,7 +223,7 @@ class PatchEmbed extends nn.Module {
 
   override forward(x: Tensor): Tensor {
     const grid = this.proj.forward(x);                        // [B, D, H/p, W/p]
-    const [batch = 1, dim = DIM, gh = 1, gw = 1] = grid.shape;
+    const [batch = 1, dim = 1, gh = 1, gw = 1] = grid.shape;
     // [B, D, H', W'] → [B, D, N] → [B, N, D]
     return grid.reshape([batch, dim, gh * gw]).permute([0, 2, 1]);
   }
@@ -219,24 +243,26 @@ export class VisionTransformer extends nn.Module {
   private readonly norm: nn.LayerNorm;
   private readonly head: nn.Linear;
   private readonly patches: number;
+  private readonly dim: number;
 
-  constructor(numClasses: number, image = 224) {
+  constructor(numClasses: number, v: Variant = TINY, image = 224) {
     super();
     const grid = image / PATCH;
     this.patches = grid * grid;
+    this.dim = v.dim;
 
     // 코어가 파라미터를 만드는 방식 그대로다(`BatchNormND` 를 보라) — 텐서를
     // 만들고 `claim` 으로 붙든다. 안 붙들면 스코프가 닫힐 때 값이 풀린다.
-    this.cls_token = Tensor.owned([1, 1, DIM], 0);
-    this.pos_embed = Tensor.owned([1, this.patches + 1, DIM], 0);
+    this.cls_token = Tensor.owned([1, 1, v.dim], 0);
+    this.pos_embed = Tensor.owned([1, this.patches + 1, v.dim], 0);
     this.claim(this.cls_token, this.pos_embed);
 
-    this.patch_embed = new PatchEmbed(DIM, PATCH);
+    this.patch_embed = new PatchEmbed(v.dim, PATCH);
     this.blocks = new nn.Sequential(
-      Array.from({ length: DEPTH }, () => new Block(DIM, HEADS)),
+      Array.from({ length: v.depth }, () => new Block(v.dim, v.heads)),
     );
-    this.norm = new nn.LayerNorm([DIM], NORM_EPS);
-    this.head = new nn.Linear(DIM, numClasses, true);
+    this.norm = new nn.LayerNorm([v.dim], NORM_EPS);
+    this.head = new nn.Linear(v.dim, numClasses, true);
   }
 
   /**
@@ -252,7 +278,7 @@ export class VisionTransformer extends nn.Module {
 
     // cls 토큰을 앞에 붙인다. torch 의 `torch.cat([cls, x], dim=1)` 과 같은
     // 자리에 같은 이름으로 있다 — **메서드가 아니라 static 이라 못 찾았었다.**
-    const cls = this.cls_token.expand(batch, 1, DIM);
+    const cls = this.cls_token.expand(batch, 1, this.dim);
     let h = Tensor.cat([cls, tokens], 1).add(this.pos_embed);
 
     h = this.blocks.forward(h);
@@ -264,5 +290,18 @@ export class VisionTransformer extends nn.Module {
 
 /** timm 의 `vit_tiny_patch16_224`. */
 export function vitTinyPatch16(numClasses: number): VisionTransformer {
-  return new VisionTransformer(numClasses, 224);
+  return new VisionTransformer(numClasses, TINY, 224);
 }
+
+/** timm 의 `vit_small_patch16_224`. tiny 와 갈리는 것은 `dim` 과 `heads` 뿐이다. */
+export function vitSmallPatch16(numClasses: number): VisionTransformer {
+  return new VisionTransformer(numClasses, SMALL, 224);
+}
+
+/** timm 의 `vit_base_patch16_224`. */
+export function vitBasePatch16(numClasses: number): VisionTransformer {
+  return new VisionTransformer(numClasses, BASE, 224);
+}
+
+/** 판마다의 계획. 검사가 셋을 같은 자리에서 묻는다. */
+export const VARIANTS = { tiny: TINY, small: SMALL, base: BASE } as const;
