@@ -46,20 +46,6 @@ const MLP_RATIO = 4;
 const NORM_EPS = 1e-6;
 
 /**
- * **코어의 `Linear` 는 2 차원만 받는다.** `mm` 위에 서 있고 `mm` 이 그렇다 — torch 의
- * `F.linear` 는 마지막 축에만 적용하며 앞쪽 축을 몇 개든 통과시키지만, 여기서는
- * 그렇지 않다.
- *
- * 토큰 축을 배치에 접어 넣고 되돌린다. 토큰마다 **같은** 변환이 도는 것이므로
- * 접어도 값이 같다 — 그 사실이 이 우회를 정당하게 만든다.
- */
-function tokenwise(layer: nn.Linear, x: Tensor, outDim: number): Tensor {
-  const [batch = 1, tokens = 1, dim = 1] = x.shape;
-  return layer.forward(x.reshape([batch * tokens, dim]))
-    .reshape([batch, tokens, outDim]);
-}
-
-/**
  * 토큰끼리 서로를 본다.
  *
  * `qkv` 가 셋을 함께 내므로 `narrow` 로 갈라 쓴다 — 열쇠를 timm 과 맞추려면 층을
@@ -85,7 +71,7 @@ class Attention extends nn.Module {
     const [batch = 1, tokens = 1] = x.shape;
     const dim = this.headDim * HEADS;
 
-    const fused = tokenwise(this.qkv, x, dim * 3);            // [B, N, 3D]
+    const fused = this.qkv.forward(x);                       // [B, N, 3D]
     // [B, N, 3, H, d] → [3, B, H, N, d] 로 세우면 셋을 같은 모양으로 꺼낼 수 있다.
     const parts = fused.reshape([batch, tokens, 3, HEADS, this.headDim])
       .permute([2, 0, 3, 1, 4]);
@@ -101,10 +87,7 @@ class Attention extends nn.Module {
     const kf = k.reshape(folded);
     const vf = v.reshape(folded);
 
-    // **`transpose()` 는 2 차원 전용이다**(코어가 그렇게 말한다). 3 차원에는
-    // `permute` 나 `swapaxes(-2, -1)` 를 쓴다 — 토치에서 둘은 같은 함수인데
-    // 여기선 별칭 쪽만 랭크를 안 가린다(borch#89).
-    const scores = qf.bmm(kf.permute([0, 2, 1]));            // [B*H, N, N]
+    const scores = qf.bmm(kf.transpose(-2, -1));             // [B*H, N, N]
     const weights = scores.softmax(-1);
     const mixed = weights.bmm(vf);                           // [B*H, N, d]
 
@@ -112,7 +95,7 @@ class Attention extends nn.Module {
     const merged = mixed.reshape([batch, HEADS, tokens, this.headDim])
       .permute([0, 2, 1, 3])
       .reshape([batch, tokens, dim]);
-    return tokenwise(this.proj, merged, dim);
+    return this.proj.forward(merged);
   }
 }
 
@@ -128,9 +111,8 @@ class Mlp extends nn.Module {
   }
 
   override forward(x: Tensor): Tensor {
-    const [, , dim = 1] = x.shape;
-    const hidden = tokenwise(this.fc1, x, dim * MLP_RATIO).unary("gelu");
-    return tokenwise(this.fc2, hidden, dim);
+    const hidden = this.fc1.forward(x).unary("gelu");
+    return this.fc2.forward(hidden);
   }
 }
 

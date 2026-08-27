@@ -28,7 +28,7 @@
     "LICENSE"
   ],
   "peerDependencies": {
-    "borch-ts": ">=0.1.1 <1.0.0"
+    "borch-ts": ">=0.2.2 <1.0.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -63,7 +63,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@webgpu/types": "^0.1.71",
-    "borch-ts": ">=0.1.1 <1.0.0",
+    "borch-ts": ">=0.2.2 <1.0.0",
     "typescript": "^5.9.0"
   }
 }
