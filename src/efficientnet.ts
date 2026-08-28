@@ -300,3 +300,40 @@ export function efficientnetB2(numClasses: number): EfficientNet {
 export function efficientnetB3(numClasses: number): EfficientNet {
   return new EfficientNet(numClasses, 1.2, 1.4);
 }
+
+/**
+ * b4 부터 b7 까지. **배율 둘 말고는 b0 과 같은 표다.**
+ *
+ * 수는 timm 의 소스에서 읽었다 — `_gen_efficientnet` 을 부르는 자리의
+ * `channel_multiplier` 와 `depth_multiplier` 다. 논문 표를 옮기지 않은 것은, 이
+ * 저장소에서 표를 보고 옮긴 산수가 원본과 갈린 적이 있어서다.
+ *
+ * **입력 크기는 판마다 다르다**(b4 는 320, b7 은 600). 그것은 구조가 아니라
+ * 전처리이므로 여기 없고 매니페스트에 적힌다 — 모델은 어떤 크기든 받는다.
+ */
+export function efficientnetB4(numClasses: number): EfficientNet {
+  return new EfficientNet(numClasses, 1.4, 1.8);
+}
+
+/** timm 의 `efficientnet_b5`. */
+export function efficientnetB5(numClasses: number): EfficientNet {
+  return new EfficientNet(numClasses, 1.6, 2.2);
+}
+
+/** timm 의 `efficientnet_b6`. */
+export function efficientnetB6(numClasses: number): EfficientNet {
+  return new EfficientNet(numClasses, 1.8, 2.6);
+}
+
+/** timm 의 `efficientnet_b7`. 블록 55 개로 이 계열에서 가장 깊다. */
+export function efficientnetB7(numClasses: number): EfficientNet {
+  return new EfficientNet(numClasses, 2.0, 3.1);
+}
+
+/** 판마다의 배율. 검사가 여덟을 같은 자리에서 묻는다. */
+export const SCALES: Readonly<Record<string, readonly [number, number]>> = {
+  efficientnet_b0: [1.0, 1.0], efficientnet_b1: [1.0, 1.1],
+  efficientnet_b2: [1.1, 1.2], efficientnet_b3: [1.2, 1.4],
+  efficientnet_b4: [1.4, 1.8], efficientnet_b5: [1.6, 2.2],
+  efficientnet_b6: [1.8, 2.6], efficientnet_b7: [2.0, 3.1],
+};
