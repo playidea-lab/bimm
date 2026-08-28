@@ -111,6 +111,18 @@ Package name too similar to existing packages bigi,bili,boom,jimp,mime,viem
 | `timm/efficientnet_b1` | | CDN 에 있음 |
 | `timm/efficientnet_b2` | | CDN 에 있음 |
 | `timm/efficientnet_b3` | | CDN 에 있음 |
+| `timm/efficientnet_b4` | | 아직 |
+| `timm/efficientnet_b5` | | 아직 |
+
+`efficientnet_b6` 와 `b7` 은 **일부러 빠져 있다.** 옮기는 것은 끝났고 계획도 timm 과
+맞지만, **셰이더를 컴파일하다 WebGPU 디바이스가 통째로 떨어진다**(borch#121). 모델이
+돌기도 전이다.
+
+크기 탓이 아니다 — resnet152 는 60M 인데 통과하고 b6 는 43M 인데 죽는다. EfficientNet 은
+블록마다 채널이 달라 거의 매번 새 셰이더를 만들고(고유 모양 55 개), ResNet 은 같은 3×3 을
+반복해 23 개다.
+
+안 도는 이름을 표에 두면 그 표가 거짓말을 한다. 코어가 고쳐지면 다시 넣는다.
 | `timm/vit_tiny_patch16_224` | | CDN 에 있음 |
 | `timm/resnet18` | | 아직 |
 | `timm/resnet34` | | 아직 |

@@ -34,7 +34,7 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { type BlockPlan, efficientnetPlan } from "../src/efficientnet.js";
+import { type BlockPlan, efficientnetPlan, SCALES } from "../src/efficientnet.js";
 
 interface Row {
   readonly kind: string;
@@ -89,14 +89,32 @@ for (const [name, want] of Object.entries(TIMM)) {
   });
 }
 
-test("네 판이 실제로 다른 수를 낸다", () => {
+test("픽스처가 여덟 판을 다 든다", () => {
+  // 판을 늘리고 픽스처를 안 늘리면 위 검사들이 실패가 아니라 **조용히 줄어든다** —
+  // 안 물어본 것이 되고 화면은 초록이다.
+  assert.deepEqual(Object.keys(TIMM).sort(), Object.keys(SCALES).sort());
+});
+
+test("표의 배율이 픽스처와 같다", () => {
+  // 배율은 timm 소스에서 읽어 두 곳에 적혔다 — `SCALES` 와 픽스처. 갈리면 위
+  // 검사가 **엉뚱한 배율끼리** 비교하고도 통과할 수 있다.
+  for (const [name, want] of Object.entries(TIMM)) {
+    const pair = SCALES[name];
+    assert.ok(pair, `${name} 의 배율이 표에 없다`);
+    assert.equal(pair[0], want.width, `${name} 의 width`);
+    assert.equal(pair[1], want.depth, `${name} 의 depth`);
+  }
+});
+
+test("판마다 실제로 다른 수를 낸다", () => {
   // 같은 표에서 나오므로, 배율을 안 먹이는 실수를 하면 넷이 같은 계획이 된다.
   // 그러면 위 검사 넷 중 하나만 맞고 셋이 틀릴 것 같지만, 픽스처를 잘못 만들면
   // 넷 다 같은 것을 보고 넷 다 통과한다. 그 경우를 여기서 막는다.
-  const counts = [[1.0, 1.0], [1.0, 1.1], [1.1, 1.2], [1.2, 1.4]]
-    .map(([w = 1, d = 1]) => {
-      const p = efficientnetPlan(w, d);
-      return `${p.stem}:${p.head}:${p.stages.reduce((n, s) => n + s.length, 0)}`;
-    });
-  assert.equal(new Set(counts).size, 4, `네 판이 갈려야 한다 — ${counts.join(" · ")}`);
+  const counts = Object.values(SCALES).map(([w, d]) => {
+    const p = efficientnetPlan(w, d);
+    return `${p.stem}:${p.head}:${p.stages.reduce((n, s) => n + s.length, 0)}`;
+  });
+  // b0 과 b1 은 stem·head 가 같고 블록 수만 다르므로, 셋을 함께 봐야 갈린다.
+  assert.equal(new Set(counts).size, Object.keys(SCALES).length,
+    `판마다 갈려야 한다 — ${counts.join(" · ")}`);
 });

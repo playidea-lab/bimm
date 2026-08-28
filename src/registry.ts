@@ -35,6 +35,7 @@ import { BimmError } from "./errors.js";
 import { checkArgs, type FactoryArgs } from "./args.js";
 import {
   efficientnetB0, efficientnetB1, efficientnetB2, efficientnetB3,
+  efficientnetB4, efficientnetB5,
 } from "./efficientnet.js";
 import { MobileNetV2 } from "./mobilenet.js";
 import { mobilenetv3Large, mobilenetv3Small } from "./mobilenetv3.js";
@@ -139,6 +140,27 @@ const FACTORIES: Readonly<Record<string, Factory>> = {
     spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => efficientnetB3(args["numClasses"] ?? 1),
   },
+  "timm/efficientnet_b4": {
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
+    build: (args) => efficientnetB4(args["numClasses"] ?? 1),
+  },
+  "timm/efficientnet_b5": {
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
+    build: (args) => efficientnetB5(args["numClasses"] ?? 1),
+  },
+  // **b6 와 b7 은 여기 없다.** 계획은 timm 과 맞고(검사가 본다) 모델도 0.7 초에
+  // 서지만, **셰이더를 컴파일하다 WebGPU 디바이스가 통째로 떨어진다**(borch#121).
+  // 모델이 돌기도 전이다.
+  //
+  // 크기 탓이 아니다 — resnet152 는 60M 인데 통과하고 b6 는 43M 인데 죽는다.
+  // 계열 탓이다: EfficientNet 은 블록마다 채널이 달라 depthwise conv 가 거의 매번
+  // 새 셰이더이고(고유 모양 55 개), ResNet 은 같은 3×3 을 반복해 23 개다.
+  //
+  // 안 도는 이름을 표에 두지 않는 것이 이 저장소의 규칙이라(README 참고) 코어가
+  // 고쳐질 때까지 뺀다. `efficientnetB6`·`efficientnetB7` 자체는 남아 있다 —
+  // 지우면 그 판을 다시 만들 때 배율을 또 찾아야 한다.
+
+
 };
 
 export interface FactoryName {
