@@ -1,6 +1,6 @@
 {
   "name": "bimm-ts",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "borch 런타임 위의 모델 아키텍처 카탈로그 — timm 의 자리",
   "license": "Apache-2.0",
   "author": "PLAYIDEALAB Inc.",
