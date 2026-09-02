@@ -101,28 +101,51 @@ Package name too similar to existing packages bigi,bili,boom,jimp,mime,viem
 
 ## 지금 카탈로그에 있는 것
 
-| 이름 | 판 | 사전학습 가중치 |
-|---|---|---|
-| `borchvision/resnet18_cifar` | | CDN 에 있음 |
-| `timm/mobilenetv2_100` | | CDN 에 있음 |
-| `timm/mobilenetv3_large_100` | | CDN 에 있음 |
-| `timm/mobilenetv3_small_100` | | CDN 에 있음 |
-| `timm/efficientnet_b0` | | CDN 에 있음 |
-| `timm/efficientnet_b1` | | CDN 에 있음 |
-| `timm/efficientnet_b2` | | CDN 에 있음 |
-| `timm/efficientnet_b3` | | CDN 에 있음 |
-| `timm/efficientnet_b4` | | 아직 |
-| `timm/efficientnet_b5` | | 아직 |
-| `timm/efficientnet_b6` | | 아직 |
+열아홉이고, 전부 timm 과 대 본 수가 있다(`npm test` — GPU 없이 돈다).
 
-`efficientnet_b7` 은 **아직 빠져 있다.** 옮기는 것은 끝났고 죽지도 않지만 **218 초**가
-걸린다.
+| 이름 | 사전학습 가중치 |
+|---|---|
+| `borchvision/resnet18_cifar` | CDN |
+| `timm/mobilenetv2_100` | CDN |
+| `timm/mobilenetv3_large_100` | CDN |
+| `timm/mobilenetv3_small_100` | CDN |
+| `timm/resnet18` | CDN |
+| `timm/resnet34` | CDN |
+| `timm/resnet50` | CDN |
+| `timm/resnet101` | CDN |
+| `timm/resnet152` | CDN |
+| `timm/vit_tiny_patch16_224` | CDN |
+| `timm/vit_small_patch16_224` | CDN |
+| `timm/vit_base_patch16_224` | CDN |
+| `timm/efficientnet_b0` | CDN |
+| `timm/efficientnet_b1` | CDN |
+| `timm/efficientnet_b2` | CDN |
+| `timm/efficientnet_b3` | CDN |
+| `timm/efficientnet_b4` | CDN (레지스트리 PR 대기) |
+| `timm/efficientnet_b5` | CDN (레지스트리 PR 대기) |
+| `timm/efficientnet_b6` | **없다 — 아래를 보라** |
 
-`b6` 는 돌아왔다. 코어가 셰이더 진단을 끄면서다(borch#132, `borch-ts@0.2.6`) — 전에는
-파이프라인마다 `getCompilationInfo()` 를 기다리지도 않고 걸어서, 프로미스 2 만 개가 각자
-WGSL 소스를 붙든 채 떠 있다가 디바이스를 떨어뜨렸다.
+### b6 은 구조만 있고 화물이 영영 없다
 
-남은 수는 그대로다 — **모델 하나가 파이프라인 2 만 개**를 만든다:
+timm 에 `efficientnet_b6` 의 사전학습 가중치가 **한 개도 없다** — 태그 0 개다(실측).
+b0~b5 는 전부 있다. 가중치가 있는 것은 `tf_efficientnet_b6` 뿐인데 그것은 **다른
+모델이다**:
+
+```
+열쇠 986 개 · 모양 전부 같음   ← 그래서 strict 로도 실린다
+Conv2d(pad 1,1)  대  Conv2dSame(pad 0,0)
+bn eps 1e-5      대  1e-3
+```
+
+실리는데 다른 수를 내는 화물이 가장 나쁜 종류다. TF 의 SAME 은 짝수 stride 에서
+오른쪽·아래로 한 칸 더 채우는 비대칭 패딩이라, 코어에 그 층이 먼저 있어야 한다.
+
+### b7 은 아직 표에 없다
+
+옮기는 것은 끝났고 죽지도 않지만 **218 초**가 걸린다. 안 도는 이름을 표에 두면 그
+표가 거짓말을 한다.
+
+까닭은 **모델 하나가 파이프라인 2 만 개**를 만드는 것이다:
 
 ```
 resnet18          66      efficientnet_b4  19,531
@@ -130,18 +153,13 @@ resnet152         72      efficientnet_b6  24,798
 vit_base         121
 ```
 
-열쇠에 공간 크기와 채널이 구워지고 depthwise 는 블록마다 둘 다 바꾸기 때문이다. 그것이
-borch#121 의 본체이고, 고쳐지면 `b7` 도 들어온다.
+열쇠에 공간 크기와 채널이 구워지고 depthwise 는 블록마다 둘 다 바꾸기 때문이다.
+그것이 borch#121 의 본체이고, 고쳐지면 `b7` 도 들어온다.
 
-안 도는 이름을 표에 두면 그 표가 거짓말을 한다. 코어가 고쳐지면 다시 넣는다.
-| `timm/vit_tiny_patch16_224` | | CDN 에 있음 |
-| `timm/resnet18` | | 아직 |
-| `timm/resnet34` | | 아직 |
-| `timm/resnet50` | | CDN 에 있음 |
-| `timm/resnet101` | | 아직 |
-| `timm/resnet152` | | 아직 |
-| `timm/vit_small_patch16_224` | | 아직 |
-| `timm/vit_base_patch16_224` | | 아직 |
+b6 이 돌아온 것은 그 수가 줄어서가 아니라 코어가 셰이더 진단을 껐기 때문이다
+(borch#132, `borch-ts@0.2.6`) — 전에는 파이프라인마다 `getCompilationInfo()` 를
+기다리지도 않고 걸어서, 프로미스 2 만 개가 각자 WGSL 소스를 붙든 채 떠 있다가
+디바이스를 떨어뜨렸다.
 
 **빈 표에 자리만 잡아두지 않는다** — 코어 저장소가 여러 번 적어둔 대로 사용자 없는
 표면은 케이스가 안 생기고, 케이스 없는 표면이 조용히 틀린다. 이름은 하나씩, 그 모델을
