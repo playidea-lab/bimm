@@ -148,6 +148,17 @@ const FACTORIES: Readonly<Record<string, Factory>> = {
     spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => efficientnetB5(args["numClasses"] ?? 1),
   },
+  // **b6 은 구조뿐이고 화물이 영영 없다.** timm 에 `efficientnet_b6` 의 사전학습
+  // 가중치가 **한 개도 없다** — 태그 0 개다(실측). b0~b5 는 전부 있다. 가중치가
+  // 있는 것은 `tf_efficientnet_b6` 뿐인데, 그것은 **다른 모델이다**:
+  //
+  //     열쇠 986 개 · 모양 전부 같음  ← 그래서 strict 로도 실린다
+  //     Conv2d(pad 1,1)  대  Conv2dSame(pad 0,0)
+  //     bn eps 1e-5      대  1e-3
+  //
+  // 실리는데 다른 수를 내는 화물이 가장 나쁜 종류다. TF 의 SAME 은 짝수 stride 에서
+  // 오른쪽·아래로 한 칸 더 채우는 비대칭 패딩이라 코어에 그 층이 먼저 있어야 한다.
+  // 그래서 b6·b7 은 구조만 두고 화물은 안 만든다.
   "timm/efficientnet_b6": {
     spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => efficientnetB6(args["numClasses"] ?? 1),
