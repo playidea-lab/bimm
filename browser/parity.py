@@ -27,6 +27,7 @@
 """
 
 import argparse
+import signal
 import http.server
 import json
 import pathlib
@@ -135,16 +136,52 @@ def _serve() -> tuple[socketserver.TCPServer, int]:
     return httpd, httpd.server_address[1]
 
 
-def _reap() -> None:
-    """이 기계에 남은 playwright 브라우저를 거둔다.
+class _Felled(Exception):
+    """신호로 끊겼다. 정리 절차를 타려고 예외로 바꿔 던진다."""
 
-    닫기가 매달려도, 예외로 빠져나가도, 여기서 한 번은 정리된다. 남겨두면 다음
-    측정이 그것과 GPU 를 나눠 쓰게 되고, 그 측정은 이유 없이 느려지거나 죽는다.
-    """
+    def __init__(self, signum: int) -> None:
+        super().__init__(f"signal {signum}")
+        self.signum = signum
+
+
+def _chromium_pids() -> set[int]:
+    """지금 이 기계에 떠 있는 playwright 크로미움의 pid."""
     import subprocess
 
-    subprocess.run(["pkill", "-f", "ms-playwright/chromium"],
-                   capture_output=True, check=False)
+    out = subprocess.run(["pgrep", "-f", "ms-playwright/chromium"],
+                         capture_output=True, text=True, check=False)
+    return {int(line) for line in out.stdout.split() if line.isdigit()}
+
+
+def _reap(before: set[int]) -> None:
+    """**이 실행이 띄운** 브라우저만 거둔다.
+
+    닫기가 매달려도, 예외로 빠져나가도, `timeout` 에 잘려도 한 번은 정리된다.
+    남겨두면 다음 측정이 그것과 GPU 를 나눠 쓰게 되고, 그 측정은 이유 없이
+    느려지거나 죽는다.
+
+    ## 왜 `pkill -f ms-playwright/chromium` 이 아닌가
+
+    전에는 그것이었고, **이 기계의 모든 playwright 브라우저를 죽였다** — 같은
+    기계에서 도는 다른 세션의 것까지. 이 저장소는 워크트리 여럿이 한 기계를
+    나눠 쓰므로 그것은 남의 측정을 중간에 끊는다.
+
+    실측으로 걸렸다: 이 하네스를 한 번 돌렸더니 크로미움이 17 개에서 2 개로
+    줄었고, 그중 대부분이 내 것이 아니었다. **고아가 쌓여 측정을 망친다는
+    이야기의 절반은 그렇게 만들어진 것**일 수 있다.
+
+    playwright 는 자기가 띄운 프로세스의 pid 를 안 알려준다. 그래서 시작 전에
+    한 번 세어 두고, 끝날 때 **그때 없던 것만** 거둔다. 그 사이 다른 세션이
+    새로 띄운 것을 잘못 잡을 여지는 남지만, 모두를 죽이는 것보다는 좁다.
+    """
+    import os
+    import signal
+
+    for pid in _chromium_pids() - before:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
 
 
 def _compare(result: dict, meta: dict[str, str]) -> int:
@@ -224,6 +261,23 @@ def main(argv: list[str]) -> int:
     # "올릴 파일이 실린다" 는 말이 성립한다.
     meta = {} if args.cargo else _material(args.model, args.pretrained, args.seed, args.res)
     httpd, port = _serve()
+    # **브라우저를 띄우기 전에 한 번 센다.** 끝날 때 거둘 것을 이 차집합으로 고른다 —
+    # playwright 가 자기 프로세스의 pid 를 안 알려주기 때문이다.
+    before = _chromium_pids()
+    # **신호로 죽을 때도 거둔다.**
+    #
+    # `finally` 만으로는 부족하다 — 파이썬은 SIGTERM 을 받으면 정리 절차를 안 돌고
+    # 그 자리에서 끝난다(실측: `timeout` 에 잘린 프로세스에서 `finally` 가 안 돌았다).
+    # 그런데 이 하네스가 고아를 남기는 경우가 **정확히 그 경우**다. `timeout` 으로
+    # 자르거나 사람이 끊을 때다.
+    #
+    # 그래서 두 신호를 받아 예외로 바꾼다. 그러면 `finally` 가 돌고, 종료 코드는
+    # 신호로 죽은 것과 같게 남긴다 — 부르는 쪽이 "잘렸다" 를 구별할 수 있어야 한다.
+    def _felled(signum: int, _frame: object) -> None:
+        raise _Felled(signum)
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, _felled)
     # **어디까지 갔는지 말한다.** 이 하네스가 조용히 매달린 적이 있고, 그때 로그는
     # "재료를 담았다" 에서 끝나 있었다 — 브라우저를 여는 중인지, 페이지를 기다리는
     # 중인지 알 수가 없었다. 한 줄씩 흘려보내면 멈춘 자리가 마지막 줄이 된다.
@@ -270,12 +324,23 @@ def main(argv: list[str]) -> int:
                 verdict = _compare(result, meta)
 
         # **닫히기를 기다리지 않는다.** 판정은 위에서 이미 났고, `browser.close()` 가
-        # 매달리는 것을 실측했다(결과를 다 받아 놓고 timeout 으로 죽는다). 남은
-        # 브라우저는 조용히 새지 않는다 — GPU 를 물고 있어서 **다음 측정을 망친다.**
-        # 코어의 launch.py 가 값을 치르고 적어둔 자리이고, 이 하네스가 그대로 밟았다.
-        _reap()
+        # 매달리는 것을 실측했다(결과를 다 받아 놓고 timeout 으로 죽는다). 거두는
+        # 것은 아래 `finally` 가 한다 — 여기서 하면 정상 종료에만 닿는다.
         return verdict
+    except _Felled as felled:
+        # 신호로 잘렸다. 거두는 것은 아래 `finally` 가 하고, 여기서는 종료 코드만
+        # 신호에 맞춰 남긴다.
+        print(f"  … 신호 {felled.signum} 로 끊겼다 — 브라우저를 거둔다", flush=True)
+        return 128 + felled.signum
     finally:
+        # **어떻게 끝나든 거둔다.** 전에는 정상 종료 경로에만 있었고, 그래서
+        # 이 하네스가 고아를 남기는 경우가 정확히 **거두지 않는 경우**였다 —
+        # `timeout` 에 잘리거나, 페이지가 던지거나, 사람이 끊을 때다.
+        #
+        # 남은 브라우저는 조용히 새지 않는다. GPU 를 물고 있어서 **다음 측정을
+        # 망친다** — 한 번은 아홉 개가 쌓여 있어서 혼자 0.5 초에 끝나는 모델이
+        # 아무 줄도 못 찍고 죽었고, 그것을 모델 탓으로 읽을 뻔했다.
+        _reap(before)
         httpd.shutdown()
 
 
