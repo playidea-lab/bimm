@@ -27,6 +27,7 @@
 """
 
 import argparse
+import os
 import signal
 import http.server
 import json
@@ -322,6 +323,17 @@ def main(argv: list[str]) -> int:
                 # 실측했다 — `with` 를 빠져나가야 판정이 돌게 두면, 결과를 다 받아
                 # 놓고도 아무 말 없이 멈춘다. 닫기는 그 뒤에 하든 말든 이미 늦었다.
                 verdict = _compare(result, meta)
+                # **여기서 끝낸다.** 판정은 이미 찍혔고 남은 것은 뒷정리뿐인데,
+                # 그 뒷정리가 돌아오지 않는다 — `with` 를 나가면 `browser.close()`
+                # 가 돌고 큰 화물에서 매달린다(b6 에서 실측: 1.746e-10 을 찍어
+                # 놓고도 프로세스가 안 끝나 `timeout` 이 대신 끊었다).
+                #
+                # 그래서 브라우저를 먼저 거두고 그 자리에서 내린다. `os._exit` 는
+                # 정리 절차를 건너뛴다 — 여기서는 그것이 목적이다. 서버는 프로세스와
+                # 함께 사라지고, 브라우저는 방금 거뒀다.
+                sys.stdout.flush()
+                _reap(before)
+                os._exit(verdict)
 
         # **닫히기를 기다리지 않는다.** 판정은 위에서 이미 났고, `browser.close()` 가
         # 매달리는 것을 실측했다(결과를 다 받아 놓고 timeout 으로 죽는다). 거두는
