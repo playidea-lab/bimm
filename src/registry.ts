@@ -35,7 +35,7 @@ import { BimmError } from "./errors.js";
 import { checkArgs, type FactoryArgs } from "./args.js";
 import {
   efficientnetB0, efficientnetB1, efficientnetB2, efficientnetB3,
-  efficientnetB4, efficientnetB5,
+  efficientnetB4, efficientnetB5, efficientnetB6,
 } from "./efficientnet.js";
 import { MobileNetV2 } from "./mobilenet.js";
 import { mobilenetv3Large, mobilenetv3Small } from "./mobilenetv3.js";
@@ -148,13 +148,35 @@ const FACTORIES: Readonly<Record<string, Factory>> = {
     spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
     build: (args) => efficientnetB5(args["numClasses"] ?? 1),
   },
-  // **b6 와 b7 은 여기 없다.** 계획은 timm 과 맞고(검사가 본다) 모델도 0.7 초에
-  // 서지만, **셰이더를 컴파일하다 WebGPU 디바이스가 통째로 떨어진다**(borch#121).
-  // 모델이 돌기도 전이다.
+  // **b6 은 구조뿐이고 화물이 영영 없다.** timm 에 `efficientnet_b6` 의 사전학습
+  // 가중치가 **한 개도 없다** — 태그 0 개다(실측). b0~b5 는 전부 있다. 가중치가
+  // 있는 것은 `tf_efficientnet_b6` 뿐인데, 그것은 **다른 모델이다**:
   //
-  // 크기 탓이 아니다 — resnet152 는 60M 인데 통과하고 b6 는 43M 인데 죽는다.
-  // 계열 탓이다: EfficientNet 은 블록마다 채널이 달라 depthwise conv 가 거의 매번
-  // 새 셰이더이고(고유 모양 55 개), ResNet 은 같은 3×3 을 반복해 23 개다.
+  //     열쇠 986 개 · 모양 전부 같음  ← 그래서 strict 로도 실린다
+  //     Conv2d(pad 1,1)  대  Conv2dSame(pad 0,0)
+  //     bn eps 1e-5      대  1e-3
+  //
+  // 실리는데 다른 수를 내는 화물이 가장 나쁜 종류다. TF 의 SAME 은 짝수 stride 에서
+  // 오른쪽·아래로 한 칸 더 채우는 비대칭 패딩이라 코어에 그 층이 먼저 있어야 한다.
+  // 그래서 b6·b7 은 구조만 두고 화물은 안 만든다.
+  "timm/efficientnet_b6": {
+    spec: { numClasses: { kind: "int", min: 1, max: MAX_CLASSES } },
+    build: (args) => efficientnetB6(args["numClasses"] ?? 1),
+  },
+  // **b7 은 아직 여기 없다.** 계획은 timm 과 맞고 죽지도 않지만 **218 초**가 걸린다.
+  //
+  // b6 가 돌아온 것은 코어가 셰이더 진단을 끄면서다(borch#132, `borch-ts@0.2.6`).
+  // 파이프라인마다 `getCompilationInfo()` 를 기다리지도 않고 걸어서, 프로미스 2 만
+  // 개가 각자 WGSL 소스를 붙든 채 떠 있다가 디바이스를 떨어뜨렸다.
+  //
+  // 남은 수는 그대로다 — **모델 하나가 파이프라인 2 만 개**를 만든다:
+  //
+  //     resnet18          66      efficientnet_b4  19,531
+  //     resnet152         72      efficientnet_b6  24,798
+  //     vit_base         121
+  //
+  // 열쇠에 공간 크기와 채널이 구워지고 depthwise 는 블록마다 둘 다 바꾸기 때문이다.
+  // 그것이 borch#121 의 본체이고, 고쳐지면 b7 도 들어온다.
   //
   // 안 도는 이름을 표에 두지 않는 것이 이 저장소의 규칙이라(README 참고) 코어가
   // 고쳐질 때까지 뺀다. `efficientnetB6`·`efficientnetB7` 자체는 남아 있다 —
