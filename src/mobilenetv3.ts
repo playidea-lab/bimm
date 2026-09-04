@@ -328,13 +328,33 @@ export class MobileNetV3 extends nn.Module {
     this.headChannels = recipe.head;
   }
 
+  /**
+   * timm 의 `forward_features` — 전역 풀링 **앞까지**, `[N, C, H, W]`.
+   * 동결 백본으로 쓸 때 `forwardHead(h, true)` 와 짝이다.
+   */
+  forwardFeatures(x: Tensor): Tensor {
+    const h = this.bn1.forward(this.conv_stem.forward(x)).unary("hardswish");
+    return this.blocks.forward(h);
+  }
+
+  /**
+   * timm 의 `forward_head` — 여기는 뒤집혀 있어 **평균이 먼저** 오고 `conv_head` 가
+   * 그 뒤다(넓힌 뒤에 평균을 내면 V2 가 되고, 수도 달라진다). `preLogits` 면 분류기
+   * 앞의 `[N, numFeatures]` 벡터를 돌려준다. 현장 학습기의 특징 캐시가 이것이다.
+   */
+  forwardHead(h: Tensor, preLogits = false): Tensor {
+    const wide = this.conv_head.forward(h.adaptiveAvgPool(1)).unary("hardswish");
+    const flat = wide.reshape([wide.shape[0] ?? 1, this.headChannels]);
+    return preLogits ? flat : this.classifier.forward(flat);
+  }
+
+  /** 분류기 앞 벡터의 길이. timm 의 `num_features`. */
+  get numFeatures(): number {
+    return this.headChannels;
+  }
+
   override forward(x: Tensor): Tensor {
-    let h = this.bn1.forward(this.conv_stem.forward(x)).unary("hardswish");
-    h = this.blocks.forward(h);
-    // **평균이 먼저다.** 넓힌 뒤에 평균을 내면 V2 가 되고, 수도 달라진다.
-    h = h.adaptiveAvgPool(1);
-    h = this.conv_head.forward(h).unary("hardswish");
-    return this.classifier.forward(h.reshape([h.shape[0] ?? 1, this.headChannels]));
+    return this.forwardHead(this.forwardFeatures(x));
   }
 }
 

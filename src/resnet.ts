@@ -111,9 +111,30 @@ export class ResNet18Cifar extends nn.Module {
     this.fc = new nn.Linear(FINAL_CHANNELS, numClasses);
   }
 
+  /**
+   * timm 의 `forward_features` — 전역 풀링 **앞까지**, `[N, C, H, W]`.
+   * 동결 백본으로 쓸 때 `forwardHead(h, true)` 와 짝이다.
+   */
+  forwardFeatures(x: Tensor): Tensor {
+    const h = this.bn.forward(this.stem.forward(x)).unary("relu");
+    return this.body.forward(h);
+  }
+
+  /**
+   * timm 의 `forward_head` — 풀링하고 펴서 분류기까지. `preLogits` 면 분류기 **앞의**
+   * `[N, numFeatures]` 벡터를 돌려준다. 현장 학습기의 특징 캐시가 이것이다.
+   */
+  forwardHead(h: Tensor, preLogits = false): Tensor {
+    const pooled = h.adaptiveAvgPool(1).reshape([h.shape[0] ?? 1, FINAL_CHANNELS]);
+    return preLogits ? pooled : this.fc.forward(pooled);
+  }
+
+  /** 분류기 앞 벡터의 길이. timm 의 `num_features`. */
+  get numFeatures(): number {
+    return FINAL_CHANNELS;
+  }
+
   override forward(x: Tensor): Tensor {
-    let h = this.bn.forward(this.stem.forward(x)).unary("relu");
-    h = this.body.forward(h).adaptiveAvgPool(1);
-    return this.fc.forward(h.reshape([h.shape[0] ?? 1, FINAL_CHANNELS]));
+    return this.forwardHead(this.forwardFeatures(x));
   }
 }

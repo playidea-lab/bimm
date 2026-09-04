@@ -272,7 +272,11 @@ export class VisionTransformer extends nn.Module {
     return { cls_token: this.cls_token, pos_embed: this.pos_embed };
   }
 
-  override forward(x: Tensor): Tensor {
+  /**
+   * timm 의 `forward_features` — 정규화까지 마친 **토큰 열** `[N, 1 + 패치 수, D]`.
+   * cls 토큰이 0 번이다. 동결 백본으로 쓸 때 `forwardHead(h, true)` 와 짝이다.
+   */
+  forwardFeatures(x: Tensor): Tensor {
     const tokens = this.patch_embed.forward(x);               // [B, N, D]
     const [batch = 1] = tokens.shape;
 
@@ -282,9 +286,25 @@ export class VisionTransformer extends nn.Module {
     let h = Tensor.cat([cls, tokens], 1).add(this.pos_embed);
 
     h = this.blocks.forward(h);
-    h = this.norm.forward(h);
-    // **0 번 토큰만.** 평균을 내면 그럴듯한 다른 모델이 된다.
-    return this.head.forward(h.select(1, 0));
+    return this.norm.forward(h);
+  }
+
+  /**
+   * timm 의 `forward_head` — **0 번 토큰만** 뽑아 분류기까지(평균을 내면 그럴듯한
+   * 다른 모델이 된다). `preLogits` 면 분류기 앞의 cls 토큰 `[N, numFeatures]` 다.
+   */
+  forwardHead(h: Tensor, preLogits = false): Tensor {
+    const cls = h.select(1, 0);
+    return preLogits ? cls : this.head.forward(cls);
+  }
+
+  /** 분류기 앞 벡터의 길이. timm 의 `num_features`. */
+  get numFeatures(): number {
+    return this.dim;
+  }
+
+  override forward(x: Tensor): Tensor {
+    return this.forwardHead(this.forwardFeatures(x));
   }
 }
 

@@ -152,10 +152,18 @@ function layers(body: string): readonly string[] {
   return found;
 }
 
-/** `forward` 본문. 공백은 두 저장소의 줄바꿈 취향이므로 지운다. */
-function forwardBody(body: string): string {
-  const at = body.indexOf("forward(");
-  assert.ok(at >= 0, "forward 를 못 찾았습니다");
+/**
+ * 이름으로 찾은 메서드의 본문. 공백은 두 저장소의 줄바꿈 취향이므로 지운다.
+ *
+ * **정의를 찾지 호출을 찾지 않는다.** `indexOf("forward(")` 는 `this.stem.forward(x)`
+ * 같은 호출에도 걸려서, `forwardFeatures` 가 `forward` 앞에 선 순간 엉뚱한 본문을
+ * 집었다(실측: `forwardHead` 의 본문이 "forward" 로 나왔다).
+ */
+function methodBody(body: string, name: string): string {
+  const def = new RegExp(`(?:^|\\s)(?:override\\s+)?${name}\\(`);
+  const hit = def.exec(body);
+  assert.ok(hit, `${name} 를 못 찾았습니다`);
+  const at = hit.index;
   const open = body.indexOf("{", at);
   let depth = 0;
   for (let i = open; i < body.length; i += 1) {
@@ -165,7 +173,24 @@ function forwardBody(body: string): string {
       if (depth === 0) return body.slice(open + 1, i).replace(/\s+/g, "");
     }
   }
-  throw new Error("forward 본문이 안 닫혔습니다");
+  throw new Error(`${name} 본문이 안 닫혔습니다`);
+}
+
+const forwardBody = (body: string): string => methodBody(body, "forward");
+
+/**
+ * 본문이 거치는 층과 연산, 이름만 — `this.bn.forward` 는 `bn`, `.unary("relu")` 는
+ * `unary:relu`, 풀링·펴기는 그 이름. 정렬해서 돌려주므로 **집합**이다.
+ */
+function ops(body: string): string[] {
+  const found: string[] = [];
+  const re = /this\.(\w+)\.forward\(|\.unary\("(\w+)"\)|\.(adaptiveAvgPool|reshape|poolND)\(/g;
+  let hit = re.exec(body);
+  while (hit) {
+    found.push(hit[1] ?? (hit[2] ? `unary:${hit[2]}` : hit[3] ?? ""));
+    hit = re.exec(body);
+  }
+  return found.sort();
 }
 
 const ours = rename(stripComments(read(OURS)));
@@ -209,9 +234,16 @@ test("블록의 forward 가 코어의 것과 같다", () => {
   );
 });
 
-test("ResNet-18 의 forward 가 코어의 것과 같다", () => {
-  assert.equal(
-    forwardBody(classBody(ours, "ResNet18")),
-    forwardBody(classBody(core, "ResNet18")),
-  );
+test("ResNet-18 의 forward 가 코어의 것과 같다 — 층과 연산의 집합으로", () => {
+  // 이쪽의 `forward` 는 `forwardHead(forwardFeatures(x))` 로 갈라져 있다(동결 백본이
+  // 분류기 앞 벡터를 꺼내는 자리). 글자 대조는 그래서 안 되고, 두 메서드가 거치는
+  // 층·연산을 합쳐 코어의 `forward` 가 거치는 것과 집합으로 댄다. `reshape` 와 `fc` 의
+  // 글자 순서가 두 쪽에서 다른 것(코어는 `fc.forward(h.reshape(..))`)도 이래서 무관하다.
+  const theirs = ops(forwardBody(classBody(core, "ResNet18")));
+  const mine = [
+    ...ops(methodBody(classBody(ours, "ResNet18"), "forwardFeatures")),
+    ...ops(methodBody(classBody(ours, "ResNet18"), "forwardHead")),
+  ].sort();
+  assert.deepEqual(mine, theirs);
+  assert.ok(theirs.length >= 6, `코어의 forward 에서 연산을 ${theirs.length}개밖에 못 읽었다`);
 });

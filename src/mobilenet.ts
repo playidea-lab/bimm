@@ -211,11 +211,31 @@ export class MobileNetV2 extends nn.Module {
     this.classifier = new nn.Linear(HEAD_CHANNELS, numClasses);
   }
 
-  override forward(x: Tensor): Tensor {
+  /**
+   * timm 의 `forward_features` — 전역 풀링 **앞까지**, `[N, C, H, W]`.
+   * 동결 백본으로 쓸 때 `forwardHead(h, true)` 와 짝이다.
+   */
+  forwardFeatures(x: Tensor): Tensor {
     let h = this.bn1.forward(this.conv_stem.forward(x)).unary("relu6");
     h = this.blocks.forward(h);
-    h = this.bn2.forward(this.conv_head.forward(h)).unary("relu6");
-    h = h.adaptiveAvgPool(1);
-    return this.classifier.forward(h.reshape([h.shape[0] ?? 1, HEAD_CHANNELS]));
+    return this.bn2.forward(this.conv_head.forward(h)).unary("relu6");
+  }
+
+  /**
+   * timm 의 `forward_head` — 풀링하고 펴서 분류기까지. `preLogits` 면 분류기 **앞의**
+   * `[N, numFeatures]` 벡터를 돌려준다. 현장 학습기의 특징 캐시가 이것이다.
+   */
+  forwardHead(h: Tensor, preLogits = false): Tensor {
+    const pooled = h.adaptiveAvgPool(1).reshape([h.shape[0] ?? 1, HEAD_CHANNELS]);
+    return preLogits ? pooled : this.classifier.forward(pooled);
+  }
+
+  /** 분류기 앞 벡터의 길이. timm 의 `num_features`. */
+  get numFeatures(): number {
+    return HEAD_CHANNELS;
+  }
+
+  override forward(x: Tensor): Tensor {
+    return this.forwardHead(this.forwardFeatures(x));
   }
 }

@@ -271,13 +271,34 @@ export class EfficientNet extends nn.Module {
     this.headChannels = plan.head;
   }
 
-  override forward(x: Tensor): Tensor {
+  /**
+   * timm 의 `forward_features` — 전역 풀링 **앞까지**, `[N, C, H, W]`.
+   * 동결 백본으로 쓸 때 `forwardHead(h, true)` 와 짝이다.
+   */
+  forwardFeatures(x: Tensor): Tensor {
     let h = this.bn1.forward(this.conv_stem.forward(x)).unary("silu");
     h = this.blocks.forward(h);
-    // **넓힌 뒤 평균이다.** V3 만 뒤집혀 있고 여기는 V2 와 같다.
-    h = this.bn2.forward(this.conv_head.forward(h)).unary("silu");
-    h = h.adaptiveAvgPool(1);
-    return this.classifier.forward(h.reshape([h.shape[0] ?? 1, this.headChannels]));
+    // **넓힌 뒤 평균이다.** V3 만 뒤집혀 있고 여기는 V2 와 같다. timm 도 `conv_head`
+    // 까지를 `forward_features` 에 둔다.
+    return this.bn2.forward(this.conv_head.forward(h)).unary("silu");
+  }
+
+  /**
+   * timm 의 `forward_head` — 풀링하고 펴서 분류기까지. `preLogits` 면 분류기 **앞의**
+   * `[N, numFeatures]` 벡터를 돌려준다. 현장 학습기의 특징 캐시가 이것이다.
+   */
+  forwardHead(h: Tensor, preLogits = false): Tensor {
+    const pooled = h.adaptiveAvgPool(1).reshape([h.shape[0] ?? 1, this.headChannels]);
+    return preLogits ? pooled : this.classifier.forward(pooled);
+  }
+
+  /** 분류기 앞 벡터의 길이. timm 의 `num_features`. */
+  get numFeatures(): number {
+    return this.headChannels;
+  }
+
+  override forward(x: Tensor): Tensor {
+    return this.forwardHead(this.forwardFeatures(x));
   }
 }
 
