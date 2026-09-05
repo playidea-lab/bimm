@@ -193,8 +193,47 @@ function ops(body: string): string[] {
   return found.sort();
 }
 
+/**
+ * 코어의 벤치가 0.2.8 에서 얻은 **추론용 접기**는 대조 대상이 아니다.
+ *
+ * `fuse()` 는 BatchNorm 을 앞의 컨볼루션에 접고(`fuse_conv_bn_eval`) relu 와 잔차 합을
+ * 그 에필로그에 접는다(`nn.intrinsic`). 층이 늘어난 것이 아니라 **같은 층을 추론
+ * 시점에 다시 쓴 것**이고, 학습되는 파라미터도 `stateDict` 의 열쇠도 그대로다. 그런데
+ * 소스를 보는 이 대조는 `new nn.Identity()` 와 `new nn.ConvReLU2d(this.conv1)` 를
+ * 층으로 읽고 `if (this.fused) { … }` 를 forward 의 일부로 읽어, 코어를 0.2.9 로 올린
+ * 날 여섯 검사가 한꺼번에 빨개졌다 — 모델은 한 줄도 안 바뀌었는데.
+ *
+ * 그래서 대조 전에 접기를 걷어낸다: `fuse()` 메서드, `fused*` 필드, forward 의
+ * `if (this.fused*) { … }` 분기. 이 저장소의 `ResNet18Cifar` 가 같은 접기를 얻는 날
+ * 이 함수는 양쪽에 걸리고, 그때는 없어도 된다.
+ */
+function withoutInferenceFold(source: string): string {
+  let out = source.replace(/^[ \t]*private\s+(?:readonly\s+)?fused\w*\s*:[^\n]*\n/gm, "");
+  const cut = (text: string, opener: RegExp): string => {
+    for (;;) {
+      const hit = opener.exec(text);
+      if (!hit) return text;
+      const open = text.indexOf("{", hit.index);
+      let depth = 0;
+      let end = -1;
+      for (let i = open; i < text.length; i += 1) {
+        if (text[i] === "{") depth += 1;
+        else if (text[i] === "}") {
+          depth -= 1;
+          if (depth === 0) { end = i; break; }
+        }
+      }
+      if (end < 0) return text;
+      text = text.slice(0, hit.index) + text.slice(end + 1);
+    }
+  };
+  out = cut(out, /\n[ \t]*fuse\(\)\s*:\s*void\s*\{/);
+  out = cut(out, /if\s*\(this\.fused\w*\)\s*\{/);
+  return out;
+}
+
 const ours = rename(stripComments(read(OURS)));
-const core = stripComments(readCore());
+const core = withoutInferenceFold(stripComments(readCore()));
 
 test("블록이 만드는 층이 코어의 것과 같다", () => {
   // 코어의 Conv2d 가 dilation·groups 를 bias 앞에 들였을 때 갈린 자리가 여기다.

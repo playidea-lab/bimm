@@ -99,6 +99,41 @@ Package name too similar to existing packages bigi,bili,boom,jimp,mime,viem
 패키지를 필수 peer 로 두면 npm 이 lockfile 조차 못 만들어서 한동안 optional 이었는데,
 그 조건이 아니게 됐다.
 
+## 어댑터가 없는 기계 — 같은 표에서 `cpu` 그래프를 짓는다
+
+`createModel` 은 층이 곧 텐서라 WebGPU 어댑터가 든다. 어댑터가 없는 기계(원격 세션,
+정책으로 꺼진 가속, 구형 브라우저)에서는 코어의 `cpu` 장치가 대신 도는데, 그 장치는
+`nn.Module` 을 걷지 않고 **체크포인트의 바이트와 네트워크의 모양**에서 출발한다. 그
+모양이 이 저장소의 plan 표이므로, 표에서 그래프를 짓는 함수도 표 옆에 있다.
+
+```ts
+import { cpu } from "borch-ts";
+import { cpuGraphFor } from "bimm-ts";
+
+const st = cpu.readSafetensors(bytes);                       // 허브가 준 바이트, 장치 없이
+const graph = cpuGraphFor({ library: "timm", factory: "efficientnet_b0" }, st, { numClasses: 1000 });
+const runner = new cpu.CpuRunner(await cpu.loadKernels(), graph);
+const logits = runner.forward(imageNCHW, batch, 224, 224); // [batch × 1000]
+```
+
+`{ features: true }` 를 주면 분류기 앞, 전역 평균 풀까지만 — `forwardHead(h, true)` 와
+같은 자리다. 두 길이 같은 매니페스트, 같은 바이트, 같은 표에서 출발한다:
+
+    어댑터 있음 → hub.load()          → createModel()  → WebGPU
+    어댑터 없음 → hub.fetchWeights()  → cpuGraphFor()  → cpu.CpuRunner
+
+**지을 수 있는 것**: `timm/efficientnet_b0`~`b7`, `timm/resnet18`~`resnet152`. MobileNet
+(hardsigmoid, V3 의 뒤집힌 머리)과 ViT(attention)는 `cpu` 장치에 그 연산이 없어 이름으로
+거절한다. `borchvision/resnet18_cifar` 는 스템이 달라 아직 없다.
+
+열쇠 이름은 timm 의 것을 손으로 적었고, 하나라도 틀리면 그 자리의 이웃 열쇠를 들고
+크게 실패한다. `test/cpu.test.ts` 는 GPU 없이 반대 방향도 본다 — plan 이 말하는 열쇠를
+변환이 **남김없이, 빠짐없이** 읽는지, 그리고 그래프가 실제로 도는지. 값이 torch 와 같은지는
+코어의 `npm run cpu:ts` 가 허브의 진짜 체크포인트로 WebGPU 장치와 대조한다(EfficientNet-B0
+로짓 상대 8.7e-5, ResNet-18 4.0e-7 — 2026-09-05, `apple / metal-3`).
+
+peer 범위가 `>=0.2.9` 로 오른 것이 이 절 때문이다. `cpu` 이름공간이 그 판에서 나왔다.
+
 ## 지금 카탈로그에 있는 것
 
 열아홉이고, 전부 timm 과 대 본 수가 있다(`npm test` — GPU 없이 돈다).
