@@ -38,4 +38,6 @@ export {
   BasicBlock as ResNetBasicBlock, Bottleneck, ResNet,
   resnet18, resnet34, resnet50, resnet101, resnet152,
 } from "./resnet50.js";
+// 어댑터가 없는 기계: 같은 plan 표에서 borch-ts `cpu` 장치의 그래프를 짓는다.
+export { cpuGraphFor, efficientnetCpuGraph, resnetCpuGraph, CPU_FACTORIES, type CpuGraphOptions } from "./cpu.js";
 export { BimmError } from "./errors.js";
