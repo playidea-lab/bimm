@@ -39,3 +39,30 @@ export {
   resnet18, resnet34, resnet50, resnet101, resnet152,
 } from "./resnet50.js";
 export { BimmError } from "./errors.js";
+
+// **The plan tables** — an architecture's shape without any weights, GPU-free. They were
+// exported from their own modules but not from here, so a consumer that wants to walk a
+// model block by block (a streaming weight loader, `borch`'s frozen-weight window) could
+// not reach them. Re-exported with per-architecture names, since each module calls its own
+// `Plan`/`BlockPlan`. The `cpuGraphFor` path already walks these; a streaming loader is the
+// third consumer.
+export {
+  efficientnetPlan, SCALES,
+  type Plan as EfficientNetPlan, type BlockPlan as EfficientNetBlockPlan,
+} from "./efficientnet.js";
+export {
+  mobilenetv2Plan,
+  type Plan as MobileNetV2Plan, type BlockPlan as MobileNetV2BlockPlan,
+} from "./mobilenet.js";
+export {
+  mobilenetv3Plan,
+  type Plan as MobileNetV3Plan, type BlockPlan as MobileNetV3BlockPlan,
+} from "./mobilenetv3.js";
+export {
+  resnetPlan, resnet50Plan, RESNETS,
+  type Plan as ResNetPlan, type BlockPlan as ResNetBlockPlan, type DownsamplePlan,
+} from "./resnet50.js";
+export {
+  vitPlan, vitTinyPlan, VARIANTS,
+  type VitPlan,
+} from "./vit.js";
