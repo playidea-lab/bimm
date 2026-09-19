@@ -33,7 +33,7 @@
  * 파일이 아니라 매니페스트에 적히고, 만드는 쪽이 `default_cfg` 에서 받아 적는다.
  */
 
-import { nn, Tensor } from "borch-ts";
+import { Device, keepAlive, nn, Tensor } from "borch-ts";
 
 /** 패치 한 변. `/16` 판들이 전부 이 수다. */
 const PATCH = 16;
@@ -137,6 +137,13 @@ class Attention extends nn.Module {
     this.scale = 1 / Math.sqrt(this.headDim);
   }
 
+  /**
+   * 키 마스크 `[1, 1, N]` — 0 은 진짜 토큰, `-Infinity` 는 자리를 채운 토큰. `VisionTransformer`
+   * 가 토큰 열을 8 의 배수로 채울 때 걸어 준다(그 이유는 `forwardFeatures` 에). softmax 앞에서
+   * 점수에 더하므로 채운 키는 무게 0 이 되어 진짜 토큰의 답은 그대로다.
+   */
+  keyMask: Tensor | null = null;
+
   override forward(x: Tensor): Tensor {
     const [batch = 1, tokens = 1] = x.shape;
     const dim = this.headDim * this.heads;
@@ -157,7 +164,8 @@ class Attention extends nn.Module {
     const kf = k.reshape(folded);
     const vf = v.reshape(folded);
 
-    const scores = qf.bmm(kf.transpose(-2, -1));             // [B*H, N, N]
+    let scores = qf.bmm(kf.transpose(-2, -1));               // [B*H, N, N]
+    if (this.keyMask !== null) scores = scores.add(this.keyMask);   // 채운 키는 -inf → 무게 0
     const weights = scores.softmax(-1);
     const mixed = weights.bmm(vf);                           // [B*H, N, d]
 
@@ -194,7 +202,8 @@ class Mlp extends nn.Module {
  */
 class Block extends nn.Module {
   private readonly norm1: nn.LayerNorm;
-  private readonly attn: Attention;
+  /** `VisionTransformer.forwardFeatures` 가 키 마스크를 걸 수 있도록 밖에서 보인다. */
+  readonly attn: Attention;
   private readonly norm2: nn.LayerNorm;
   private readonly mlp: Mlp;
 
@@ -245,6 +254,14 @@ export class VisionTransformer extends nn.Module {
   private readonly patches: number;
   private readonly dim: number;
 
+  /**
+   * 토큰 열을 8 의 배수로 채워서 돌린다(기본 켜짐; 아래 `forwardFeatures`). 끄면 이전과 같은
+   * 197 토큰 그대로 — 정렬의 값을 재거나 문제를 가를 때 쓰는 손잡이다.
+   */
+  alignTokens = true;
+  /** 채운 길이별 키 마스크. 값이 상수라 한 번 만들어 붙들어 둔다. */
+  private readonly masks = new Map<number, Tensor>();
+
   constructor(numClasses: number, v: Variant = TINY, image = 224) {
     super();
     const grid = image / PATCH;
@@ -285,8 +302,43 @@ export class VisionTransformer extends nn.Module {
     const cls = this.cls_token.expand(batch, 1, this.dim);
     let h = Tensor.cat([cls, tokens], 1).add(this.pos_embed);
 
+    // **토큰 열을 8 의 배수로 채운다 — subgroup 행렬이 있는 기기에서.** 224 px 는 196 패치
+    // + cls = 197 토큰이고, 코어의 배치 행렬곱은 세 변이 모두 8 의 배수일 때만 subgroup
+    // 커널(`bmmsg`)을 타므로, 197 은 어텐션의 q·kᵀ 와 attn·v 를 전부 스칼라 타일로
+    // 보냈다 — 한 스텝 GPU 시간의 4 분의 1 이 그 둘이었다(borch `docs/SCALE.md`,
+    // 2026-09-19). 여기서 한 번 200 으로 채우면 열두 블록의 곱이 모두 정렬되고, 블록마다
+    // 드는 것은 점수에 마스크를 더하는 한 번뿐이다. 채운 토큰은 0 벡터로 들어가 키로는
+    // `-inf` 로 가려지고(무게 0), 출력으로는 마지막에 잘려 나간다 — 진짜 토큰의 값은
+    // 그대로, `forwardFeatures` 가 내는 모양도 `[B, 197, D]` 그대로다. 호출마다 곱 하나씩
+    // 채우고 되모으는 쪽은 재어 보니 손해였다(197×197 점수를 되모으는 값이 곱보다 컸다);
+    // 열 전체를 한 번 채우는 이 방식이 그 비용을 피한다. subgroup 행렬이 없는 기기에서는
+    // 스칼라 커널이 197 을 그대로 받으므로 아무것도 바꾸지 않는다.
+    const n = this.patches + 1;
+    const np = Math.ceil(n / 8) * 8;
+    const align = this.alignTokens && Device.subgroupMatrix && np !== n;
+    if (align) {
+      h = Tensor.cat([h, Tensor.zeros([batch, np - n, this.dim])], 1);   // [B, np, D]
+      const mask = this.keyMaskFor(n, np);
+      for (const blk of this.blocks.children()) (blk as Block).attn.keyMask = mask;
+    }
     h = this.blocks.forward(h);
+    if (align) {
+      for (const blk of this.blocks.children()) (blk as Block).attn.keyMask = null;
+      h = h.narrow(1, 0, n);                                    // 채운 토큰을 잘라 [B, n, D]
+    }
     return this.norm.forward(h);
+  }
+
+  /** `[1, 1, np]` — 앞 `n` 은 0, 나머지는 `-Infinity`. 길이별로 한 번 만든다. */
+  private keyMaskFor(n: number, np: number): Tensor {
+    let m = this.masks.get(np);
+    if (!m) {
+      const v = new Float32Array(np);
+      for (let i = n; i < np; i++) v[i] = -Infinity;
+      m = keepAlive(Tensor.from(v, [1, 1, np]));
+      this.masks.set(np, m);
+    }
+    return m;
   }
 
   /**
